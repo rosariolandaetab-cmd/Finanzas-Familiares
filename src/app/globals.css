@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  min-height: 100dvh;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+input,
+button {
+  font-family: inherit;
+}
