@@ -1,4 +1,4 @@
-const CACHE_NAME = "finanzas-shell-v1";
+const CACHE_NAME = "finanzas-shell-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -23,6 +23,21 @@ self.addEventListener("fetch", (event) => {
 
   if (url.origin !== self.location.origin) return;
 
+  // paginas (HTML): siempre la version mas nueva primero, cache solo como respaldo sin señal
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match("/")))
+    );
+    return;
+  }
+
+  // resto de archivos (JS, CSS, imagenes): rapido desde cache, actualizando en segundo plano
   event.respondWith(
     caches.match(request).then((cached) => {
       const network = fetch(request)
