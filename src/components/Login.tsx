@@ -19,7 +19,7 @@ export function Login() {
     });
     setEnviando(false);
     if (error) {
-      setError("No se pudo enviar el link. Intenta de nuevo.");
+      setError(`No se pudo enviar el link: ${error.message}`);
       return;
     }
     setEnviado(true);
