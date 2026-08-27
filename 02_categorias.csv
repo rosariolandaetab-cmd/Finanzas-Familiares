@@ -1,0 +1,42 @@
+codigo,tipo,grupo,nombre,orden
+VA-01,GASTO,Variables hogar,Supermercado,1
+VA-06,GASTO,Variables ocio,Restaurant,2
+VA-07,GASTO,Variables ocio,Delivery,3
+FO-02,GASTO,Fondos,Casa y equipamiento,4
+VA-08,GASTO,Variables ocio,Social y carrete,5
+DE-01,GASTO,Deudas,Cuota Deptos,6
+FI-09,GASTO,Fijos servicios,Suscripciones,7
+VA-10,GASTO,Variables,Mascota,8
+FI-07,GASTO,Fijos hogar,Limpieza,9
+VA-02,GASTO,Variables auto,Bencina,10
+VA-11,GASTO,Variables,Regalos,11
+VA-05,GASTO,Variables,Movilizacion,12
+FI-01,GASTO,Fijos hogar,Arriendo,13
+FI-02,GASTO,Fijos hogar,Gastos Comunes,14
+FI-08,GASTO,Fijos auto,Seguro Auto,15
+VA-04,GASTO,Variables auto,Mantencion auto,16
+VA-03,GASTO,Variables auto,Tag,17
+DE-02,GASTO,Deudas,CAE,18
+FI-05,GASTO,Fijos hogar,Internet,19
+AP-01,GASTO,Asignacion personal,Asignacion personal Rocha,20
+AP-02,GASTO,Asignacion personal,Asignacion personal Lalo,21
+FI-03,GASTO,Fijos hogar,Luz,22
+FI-04,GASTO,Fijos hogar,Gas,23
+FI-06,GASTO,Fijos hogar,Celular,24
+VA-09,GASTO,Variables,Salud,25
+FI-10,GASTO,Fijos servicios,Comisiones bancarias,26
+FO-01,GASTO,Fondos,Vacaciones,27
+VA-12,GASTO,Variables,Personal,28
+VA-99,GASTO,Variables,Otro (sin identificar),29
+FI-11,GASTO,Fijos inversion,Contribuciones deptos,30
+DE-03,GASTO,Deudas,Otras deudas,31
+IN-03,INGRESO,Ingreso inversion,Arriendo Deptos,32
+IN-01,INGRESO,Ingreso trabajo,Sueldo Rocha,33
+IN-02,INGRESO,Ingreso trabajo,Sueldo Lalo,34
+IN-05,INGRESO,Otros ingresos,Otros ingresos,35
+IN-04,INGRESO,Ingreso inversion,Utilidad inversiones,36
+TR-01,TRANSFERENCIA,Transferencia,Aporte a inversion,37
+TR-02,TRANSFERENCIA,Transferencia,Retiro de inversion,38
+TR-03,TRANSFERENCIA,Transferencia,Pago tarjeta credito,39
+TR-04,TRANSFERENCIA,Transferencia,Ajuste / cuadratura,40
+TR-05,TRANSFERENCIA,Transferencia,Garantia arriendo,41
