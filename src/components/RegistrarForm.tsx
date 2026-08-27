@@ -3,22 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { encolarMovimiento, sincronizarPendientes } from "@/lib/offlineQueue";
+import { hoyISO } from "@/lib/formato";
 import type { Categoria, Cuenta, MovimientoInsert, Persona, TipoFlujo } from "@/types/database";
 
-type MedioPago = "DEBITO" | "CREDITO" | "EFECTIVO";
+type MedioPago = "DEBITO" | "CREDITO";
 
 const TIPOS: { valor: TipoFlujo; etiqueta: string }[] = [
   { valor: "GASTO", etiqueta: "Gasto" },
   { valor: "INGRESO", etiqueta: "Ingreso" },
   { valor: "TRANSFERENCIA", etiqueta: "Transferencia" },
 ];
-
-function hoyISO() {
-  const d = new Date();
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mes}-${dia}`;
-}
 
 function formatoPesos(valor: number) {
   return valor.toLocaleString("es-CL");
@@ -89,10 +83,6 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   }, [busqueda, verTodas, categoriasDelTipo, top6]);
 
   const cuentaCorriente = useMemo(() => cuentas.find((c) => c.tipo === "CORRIENTE"), [cuentas]);
-  const cuentaEfectivo = useMemo(
-    () => cuentas.find((c) => c.tipo === "EFECTIVO") ?? cuentaCorriente,
-    [cuentas, cuentaCorriente]
-  );
   const tarjetas = useMemo(() => cuentas.filter((c) => c.tipo === "TARJETA_CREDITO"), [cuentas]);
 
   useEffect(() => {
@@ -106,8 +96,6 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   const cuentaResuelta: Cuenta | undefined =
     medioPago === "DEBITO"
       ? cuentaCorriente
-      : medioPago === "EFECTIVO"
-      ? cuentaEfectivo
       : medioPago === "CREDITO"
       ? tarjetas.find((t) => t.id === tarjetaId)
       : undefined;
@@ -265,7 +253,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
       <div>
         <label className="mb-2 block text-sm font-medium text-slate-500">Medio de pago</label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => setMedioPago("DEBITO")}
@@ -285,16 +273,6 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
             }`}
           >
             Credito
-          </button>
-          <button
-            type="button"
-            onClick={() => setMedioPago("EFECTIVO")}
-            disabled={!cuentaEfectivo}
-            className={`rounded-xl py-4 text-sm font-semibold disabled:opacity-40 ${
-              medioPago === "EFECTIVO" ? "bg-slate-900 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
-            }`}
-          >
-            Efectivo
           </button>
         </div>
         {medioPago === "CREDITO" && tarjetas.length > 1 && (

@@ -16,5 +16,9 @@ lee y escribe, no la modifica.
 
 ## Estado actual
 
-Primera entrega: solo la pantalla de **Registrar movimiento** (seccion 6.1 de la especificacion).
-Las demas pantallas (Mes, Presupuesto, Historial, Analisis) se implementan en entregas futuras.
+Las 5 pantallas principales de la especificacion (secciones 6.1 a 6.5) estan implementadas:
+Registrar, Mes, Presupuesto, Historial y Analisis, con navegacion inferior entre ellas.
+
+Automatizaciones (gastos fijos recurrentes, alertas de presupuesto, recordatorio de tarjeta,
+importar cartola, lectura de correos del banco) y el cierre de ciclos de tarjeta quedan para
+entregas futuras.
