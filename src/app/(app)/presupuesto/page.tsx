@@ -16,21 +16,43 @@ export default function PresupuestoPage() {
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([]);
   const [vista, setVista] = useState<VPresupuestoMes[]>([]);
   const [ingresoRecurrente, setIngresoRecurrente] = useState(0);
+  const [gastoNoPresupuestable, setGastoNoPresupuestable] = useState(0);
   const [ediciones, setEdiciones] = useState<Record<number, FilaEdicion>>({});
   const [copiando, setCopiando] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const [{ data: cats }, { data: pres }, { data: vistaData }, { data: resumen }] = await Promise.all([
-      supabase.from("categorias").select("*").eq("tipo", "GASTO").eq("activa", true).order("orden"),
-      supabase.from("presupuestos").select("*").eq("periodo", periodo),
-      supabase.from("v_presupuesto_mes").select("*").eq("periodo", periodo),
-      supabase.from("v_resumen_mensual").select("*").eq("periodo", periodo).maybeSingle(),
-    ]);
+    const [{ data: cats }, { data: catsFijas }, { data: pres }, { data: vistaData }, { data: resumen }] =
+      await Promise.all([
+        supabase
+          .from("categorias")
+          .select("*")
+          .eq("tipo", "GASTO")
+          .eq("activa", true)
+          .eq("presupuestable", true)
+          .order("orden"),
+        supabase.from("categorias").select("id").eq("tipo", "GASTO").eq("activa", true).eq("presupuestable", false),
+        supabase.from("presupuestos").select("*").eq("periodo", periodo),
+        supabase.from("v_presupuesto_mes").select("*").eq("periodo", periodo),
+        supabase.from("v_resumen_mensual").select("*").eq("periodo", periodo).maybeSingle(),
+      ]);
     setCategorias(cats ?? []);
     setPresupuestos(pres ?? []);
     setVista(vistaData ?? []);
     setIngresoRecurrente(resumen?.ingreso_recurrente ?? 0);
+
+    const idsFijos = (catsFijas ?? []).map((c) => c.id);
+    if (idsFijos.length > 0) {
+      const { data: movsFijos } = await supabase
+        .from("v_movimientos")
+        .select("monto")
+        .eq("periodo_devengado", periodo)
+        .eq("tipo_flujo", "GASTO")
+        .in("categoria_id", idsFijos);
+      setGastoNoPresupuestable((movsFijos ?? []).reduce((a, m) => a + m.monto, 0));
+    } else {
+      setGastoNoPresupuestable(0);
+    }
 
     const nuevasEdiciones: Record<number, FilaEdicion> = {};
     for (const c of cats ?? []) {
@@ -57,7 +79,9 @@ export default function PresupuestoPage() {
   }, [vista]);
 
   const sumaTopes = useMemo(() => vista.reduce((acc, v) => acc + v.tope, 0), [vista]);
-  const ahorroProyectado = ingresoRecurrente - sumaTopes;
+  const ahorroProyectado = ingresoRecurrente - sumaTopes - gastoNoPresupuestable;
+  const disponibleParaPresupuestar = ingresoRecurrente - gastoNoPresupuestable;
+  const restanteSinAsignar = disponibleParaPresupuestar - sumaTopes;
 
   async function guardarFila(categoriaId: number, fila: FilaEdicion) {
     const numero = Number(fila.valorTexto || "0");
@@ -100,8 +124,19 @@ export default function PresupuestoPage() {
           {formatoPesos(ahorroProyectado)}
         </p>
         <p className="mt-1 text-xs text-slate-400">
-          Ingreso recurrente ({formatoPesos(ingresoRecurrente)}) menos la suma de topes
+          Ingreso recurrente ({formatoPesos(ingresoRecurrente)}) menos fijos/deudas ({formatoPesos(gastoNoPresupuestable)})
+          menos la suma de topes
         </p>
+        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
+          <span className="text-slate-500">Disponible para repartir en topes</span>
+          <span className="font-medium text-slate-700">{formatoPesos(disponibleParaPresupuestar)}</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between text-sm">
+          <span className="text-slate-500">Sin asignar todavia</span>
+          <span className={`font-semibold ${restanteSinAsignar < 0 ? "text-red-600" : "text-emerald-600"}`}>
+            {formatoPesos(restanteSinAsignar)}
+          </span>
+        </div>
       </div>
 
       <button

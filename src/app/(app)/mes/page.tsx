@@ -6,7 +6,7 @@ import { formatoPesos, periodoActual } from "@/lib/formato";
 import { CLASES_SEMAFORO, colorSemaforo } from "@/lib/semaforo";
 import { SelectorPeriodo } from "@/components/SelectorPeriodo";
 import { WaterfallChart } from "@/components/WaterfallChart";
-import type { Cuenta, VDeudaTarjeta, VPresupuestoMes, VResumenMensual } from "@/types/database";
+import type { Cuenta, VDeudaTarjeta, VMovimiento, VPresupuestoMes, VResumenMensual } from "@/types/database";
 
 function proximoVencimiento(diaVencimiento: number | null): string | null {
   if (!diaVencimiento) return null;
@@ -26,6 +26,8 @@ export default function MesPage() {
   const [presupuestoMes, setPresupuestoMes] = useState<VPresupuestoMes[]>([]);
   const [deudas, setDeudas] = useState<VDeudaTarjeta[]>([]);
   const [tarjetas, setTarjetas] = useState<Cuenta[]>([]);
+  const [movimientosGasto, setMovimientosGasto] = useState<VMovimiento[]>([]);
+  const [categoriaAbierta, setCategoriaAbierta] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -37,6 +39,7 @@ export default function MesPage() {
         { data: presupuestoData },
         { data: deudaData },
         { data: tarjetasData },
+        { data: movsGasto },
       ] = await Promise.all([
         supabase.from("v_resumen_mensual").select("*").eq("periodo", periodo).maybeSingle(),
         supabase
@@ -48,6 +51,12 @@ export default function MesPage() {
         supabase.from("v_presupuesto_mes").select("*").eq("periodo", periodo),
         supabase.from("v_deuda_tarjeta").select("*"),
         supabase.from("cuentas").select("*").eq("tipo", "TARJETA_CREDITO").eq("activa", true),
+        supabase
+          .from("v_movimientos")
+          .select("*")
+          .eq("periodo_devengado", periodo)
+          .eq("tipo_flujo", "GASTO")
+          .order("fecha_compra", { ascending: false }),
       ]);
       if (cancelado) return;
       setResumen(resumenData ?? null);
@@ -55,6 +64,8 @@ export default function MesPage() {
       setPresupuestoMes(presupuestoData ?? []);
       setDeudas(deudaData ?? []);
       setTarjetas(tarjetasData ?? []);
+      setMovimientosGasto(movsGasto ?? []);
+      setCategoriaAbierta(null);
       setCargando(false);
     }
     cargar();
@@ -174,8 +185,17 @@ export default function MesPage() {
             {categoriasOrdenadas.map((c) => {
               const color = colorSemaforo(c.gastado, c.tope);
               const pct = c.tope > 0 ? Math.min(100, Math.round((c.gastado / c.tope) * 100)) : 100;
+              const abierta = categoriaAbierta === c.categoria;
+              const movsCategoria = abierta
+                ? movimientosGasto.filter((m) => m.categoria === c.categoria)
+                : [];
               return (
-                <div key={c.categoria} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                <button
+                  key={c.categoria}
+                  type="button"
+                  onClick={() => setCategoriaAbierta(abierta ? null : c.categoria)}
+                  className="w-full rounded-xl bg-white p-3 text-left ring-1 ring-slate-200"
+                >
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium text-slate-700">{c.categoria}</span>
                     <span className="text-slate-500">
@@ -185,7 +205,24 @@ export default function MesPage() {
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
                     <div className={`h-full ${CLASES_SEMAFORO[color]}`} style={{ width: `${pct}%` }} />
                   </div>
-                </div>
+                  {abierta && (
+                    <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-2">
+                      {movsCategoria.length === 0 ? (
+                        <p className="text-xs text-slate-400">Sin movimientos este mes.</p>
+                      ) : (
+                        movsCategoria.map((m) => (
+                          <div key={m.id} className="flex items-center justify-between text-xs">
+                            <span className="text-slate-500">
+                              {new Date(m.fecha_compra + "T00:00:00").toLocaleDateString("es-CL")}
+                              {m.comentario ? ` · ${m.comentario}` : ""}
+                            </span>
+                            <span className="font-medium text-slate-700">{formatoPesos(m.monto)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </button>
               );
             })}
           </div>

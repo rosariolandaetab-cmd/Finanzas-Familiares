@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { encolarMovimiento, sincronizarPendientes } from "@/lib/offlineQueue";
-import { hoyISO } from "@/lib/formato";
+import { hoyISO, periodoActual } from "@/lib/formato";
+import { repartirAporteInversion } from "@/lib/inversion";
 import type { Categoria, Cuenta, MovimientoInsert, Persona, TipoFlujo } from "@/types/database";
 
 type MedioPago = "DEBITO" | "CREDITO";
@@ -13,6 +14,8 @@ const TIPOS: { valor: TipoFlujo; etiqueta: string }[] = [
   { valor: "INGRESO", etiqueta: "Ingreso" },
   { valor: "TRANSFERENCIA", etiqueta: "Transferencia" },
 ];
+
+const CODIGO_APORTE_INVERSION = "TR-01";
 
 function formatoPesos(valor: number) {
   return valor.toLocaleString("es-CL");
@@ -27,8 +30,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   const [tipo, setTipo] = useState<TipoFlujo>("GASTO");
   const [montoTexto, setMontoTexto] = useState("");
   const [categoriaId, setCategoriaId] = useState<number | null>(null);
-  const [busqueda, setBusqueda] = useState("");
-  const [verTodas, setVerTodas] = useState(false);
+  const [grupoSeleccionado, setGrupoSeleccionado] = useState<string | null>(null);
   const [medioPago, setMedioPago] = useState<MedioPago | null>(null);
   const [tarjetaId, setTarjetaId] = useState<number | null>(null);
   const [fecha, setFecha] = useState(hoyISO());
@@ -74,13 +76,24 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
   const top6 = categoriasDelTipo.slice(0, 6);
 
-  const listaVisible = useMemo(() => {
-    if (busqueda.trim()) {
-      const q = busqueda.trim().toLowerCase();
-      return categoriasDelTipo.filter((c) => c.nombre.toLowerCase().includes(q));
+  const grupos = useMemo(() => {
+    const vistos = new Set<string>();
+    const lista: string[] = [];
+    for (const c of categoriasDelTipo) {
+      if (!vistos.has(c.grupo)) {
+        vistos.add(c.grupo);
+        lista.push(c.grupo);
+      }
     }
-    return verTodas ? categoriasDelTipo : top6;
-  }, [busqueda, verTodas, categoriasDelTipo, top6]);
+    return lista;
+  }, [categoriasDelTipo]);
+
+  const listaVisible = useMemo(() => {
+    if (grupoSeleccionado) {
+      return categoriasDelTipo.filter((c) => c.grupo === grupoSeleccionado);
+    }
+    return top6;
+  }, [grupoSeleccionado, categoriasDelTipo, top6]);
 
   const cuentaCorriente = useMemo(() => cuentas.find((c) => c.tipo === "CORRIENTE"), [cuentas]);
   const tarjetas = useMemo(() => cuentas.filter((c) => c.tipo === "TARJETA_CREDITO"), [cuentas]);
@@ -109,8 +122,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     setTipo("GASTO");
     setMontoTexto("");
     setCategoriaId(null);
-    setBusqueda("");
-    setVerTodas(false);
+    setGrupoSeleccionado(null);
     setMedioPago(null);
     setTarjetaId(null);
     setFecha(hoyISO());
@@ -134,7 +146,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
       creado_por: persona?.id ?? null,
     };
 
-    const { error } = await supabase.from("movimientos").insert(mov);
+    const { data: insertado, error } = await supabase.from("movimientos").insert(mov).select("id").single();
 
     if (error && !error.code) {
       // sin "code" = fallo de red (sin señal), no un error del servidor: se guarda para reintentar
@@ -152,6 +164,17 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
       setGuardando(false);
       setTimeout(() => setMensaje(null), 2500);
       return;
+    }
+
+    const categoriaElegida = categorias.find((c) => c.id === categoriaId);
+    if (categoriaElegida?.codigo === CODIGO_APORTE_INVERSION && insertado) {
+      await repartirAporteInversion({
+        movimientoId: insertado.id,
+        periodo: periodoActual(),
+        monto: montoNumero,
+        fecha,
+        creadoPor: persona?.id ?? null,
+      });
     }
 
     setMensaje("Guardado ✓");
@@ -201,8 +224,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
             onClick={() => {
               setTipo(t.valor);
               setCategoriaId(null);
-              setBusqueda("");
-              setVerTodas(false);
+              setGrupoSeleccionado(null);
             }}
             className={`flex-1 rounded-full py-2 text-sm font-medium transition ${
               tipo === t.valor
@@ -217,13 +239,37 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
       <div>
         <label className="mb-2 block text-sm font-medium text-slate-500">Categoria</label>
-        <input
-          type="text"
-          placeholder="Buscar categoria..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="mb-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-base"
-        />
+
+        {grupos.length > 1 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setGrupoSeleccionado(null)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                grupoSeleccionado === null
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+              }`}
+            >
+              Mas usadas
+            </button>
+            {grupos.map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setGrupoSeleccionado(g)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                  grupoSeleccionado === g
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           {listaVisible.map((c) => (
             <button
@@ -240,15 +286,6 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
             </button>
           ))}
         </div>
-        {!busqueda.trim() && categoriasDelTipo.length > 6 && (
-          <button
-            type="button"
-            onClick={() => setVerTodas((v) => !v)}
-            className="mt-2 text-sm text-blue-600"
-          >
-            {verTodas ? "Ver menos" : "Ver todas las categorias"}
-          </button>
-        )}
       </div>
 
       <div>

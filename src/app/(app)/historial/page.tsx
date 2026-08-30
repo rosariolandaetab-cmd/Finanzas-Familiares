@@ -27,10 +27,12 @@ export default function HistorialPage() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
 
   useEffect(() => {
+    // sin filtrar por activa: en el historial hay movimientos viejos con
+    // categorias que ya no se pueden elegir en Registrar, pero deben poder
+    // seguir viendose y editandose aqui.
     supabase
       .from("categorias")
       .select("*")
-      .eq("activa", true)
       .order("orden")
       .then(({ data }) => setCategorias(data ?? []));
     supabase
@@ -217,6 +219,23 @@ function FilaEdicion({
   const [fecha, setFecha] = useState(movimiento.fecha_compra);
   const [comentario, setComentario] = useState(movimiento.comentario ?? "");
   const [guardando, setGuardando] = useState(false);
+
+  const categoriaActual = categorias.find((c) => c.id === movimiento.categoria_id);
+  const esDeInversion = ["TR-01", "TR-02", "IN-04"].includes(categoriaActual?.codigo ?? "");
+
+  if (esDeInversion) {
+    return (
+      <div className="space-y-2 rounded-xl bg-white p-3 ring-2 ring-blue-500">
+        <p className="text-sm text-slate-600">
+          Este movimiento tiene el detalle de reparto por persona en la pestana Inversion. Para editarlo o borrarlo,
+          hazlo desde ahi para que no se desincronice.
+        </p>
+        <button type="button" onClick={onCancelar} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">
+          Cerrar
+        </button>
+      </div>
+    );
+  }
 
   async function guardar() {
     setGuardando(true);

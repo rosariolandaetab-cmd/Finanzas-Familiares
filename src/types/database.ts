@@ -3,6 +3,7 @@ export type TipoCuenta = "CORRIENTE" | "TARJETA_CREDITO" | "EFECTIVO" | "INVERSI
 export type EstadoMov = "PENDIENTE" | "PAGADO";
 export type Recurrencia = "RECURRENTE" | "EXTRAORDINARIO" | "TRANSFERENCIA";
 export type TipoTope = "FIJO" | "PORCENTAJE";
+export type TipoMovInversion = "APORTE" | "GANANCIA" | "RETIRO";
 
 export type Categoria = {
   id: number;
@@ -12,6 +13,7 @@ export type Categoria = {
   nombre: string;
   orden: number;
   activa: boolean;
+  presupuestable: boolean;
 };
 
 export type Cuenta = {
@@ -79,6 +81,7 @@ export type MovimientoUpdate = {
   monto: number;
   cuenta_id: number;
   estado: EstadoMov;
+  recurrencia: Recurrencia;
   comentario: string | null;
   actualizado_en: string;
 };
@@ -137,6 +140,44 @@ export type VDeudaTarjeta = {
   total_pendiente: number;
 };
 
+export type ParticipanteInversion = {
+  id: number;
+  nombre: string;
+  saldo_inicial: number;
+  activo: boolean;
+};
+
+export type MovimientoInversion = {
+  id: string;
+  fecha: string;
+  tipo: TipoMovInversion;
+  participante_id: number;
+  monto: number;
+  porcentaje_aplicado: number | null;
+  movimiento_id: string | null;
+  comentario: string | null;
+  creado_por: number | null;
+  creado_en: string;
+};
+
+export type MovimientoInversionInsert = {
+  fecha: string;
+  tipo: TipoMovInversion;
+  participante_id: number;
+  monto: number;
+  porcentaje_aplicado: number | null;
+  movimiento_id: string | null;
+  comentario: string | null;
+  creado_por: number | null;
+};
+
+// vista v_inversion_saldos
+export type VInversionSaldo = {
+  id: number;
+  nombre: string;
+  saldo_actual: number;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -176,6 +217,18 @@ export type Database = {
         Update: Partial<PresupuestoInsert>;
         Relationships: [];
       };
+      inversion_participantes: {
+        Row: ParticipanteInversion;
+        Insert: Partial<ParticipanteInversion>;
+        Update: Partial<ParticipanteInversion>;
+        Relationships: [];
+      };
+      inversion_movimientos: {
+        Row: MovimientoInversion;
+        Insert: MovimientoInversionInsert;
+        Update: Partial<MovimientoInversionInsert>;
+        Relationships: [];
+      };
     };
     Views: {
       v_movimientos: {
@@ -192,6 +245,10 @@ export type Database = {
       };
       v_deuda_tarjeta: {
         Row: VDeudaTarjeta;
+        Relationships: [];
+      };
+      v_inversion_saldos: {
+        Row: VInversionSaldo;
         Relationships: [];
       };
     };

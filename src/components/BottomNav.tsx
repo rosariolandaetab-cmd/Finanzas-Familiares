@@ -9,6 +9,7 @@ const ITEMS = [
   { href: "/presupuesto", etiqueta: "Presupuesto" },
   { href: "/historial", etiqueta: "Historial" },
   { href: "/analisis", etiqueta: "Analisis" },
+  { href: "/inversion", etiqueta: "Inversion" },
 ];
 
 export function BottomNav() {
