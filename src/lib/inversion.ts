@@ -106,8 +106,9 @@ export async function repartirAporteInversion({
 }
 
 // Reparte una ganancia entre los 3 participantes activos, segun cuanto tiene
-// cada uno hoy. Tambien crea el ingreso correspondiente en movimientos
-// (categoria "Utilidad inversiones", extraordinario, cuenta Inversion).
+// cada uno hoy. Tambien crea el movimiento correspondiente (categoria
+// "Ganancia inversion", tipo Transferencia: no cuenta como ingreso de la
+// familia, igual que Aporte y Retiro de inversion).
 export async function registrarGanancia({
   monto,
   fecha,
@@ -146,7 +147,7 @@ export async function registrarGanancia({
     .single();
   if (errorMov || !movimiento) return { error: "No se pudo guardar la ganancia." };
 
-  await supabase.from("movimientos").update({ recurrencia: "EXTRAORDINARIO" }).eq("id", movimiento.id);
+  await supabase.from("movimientos").update({ recurrencia: "TRANSFERENCIA" }).eq("id", movimiento.id);
 
   const filas: MovimientoInversionInsert[] = saldos.map((s) => {
     const pct = Math.max(0, s.saldo_actual) / totalSaldo;

@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase/client";
 import { formatoPesos, hoyISO } from "@/lib/formato";
 import { actualizarSaldoInicial, obtenerSaldos, registrarGanancia, registrarRetiro } from "@/lib/inversion";
+import { EvolucionSaldoChart } from "@/components/EvolucionSaldoChart";
 import type { MovimientoInversion, ParticipanteInversion, VInversionSaldo } from "@/types/database";
 
 type Accion = "GANANCIA" | "RETIRO" | null;
@@ -31,7 +32,7 @@ export default function InversionPage() {
     const [s, { data: parts }, { data: hist }] = await Promise.all([
       obtenerSaldos(),
       supabase.from("inversion_participantes").select("*").eq("activo", true).order("id"),
-      supabase.from("inversion_movimientos").select("*").order("fecha", { ascending: false }).limit(60),
+      supabase.from("inversion_movimientos").select("*").order("fecha", { ascending: false }).limit(300),
     ]);
     setSaldos(s);
     setParticipantes(parts ?? []);
@@ -44,6 +45,23 @@ export default function InversionPage() {
   }, [cargar]);
 
   const totalFondo = saldos.reduce((a, s) => a + Math.max(0, s.saldo_actual), 0);
+  const gananciaAcumulada = historial.filter((h) => h.tipo === "GANANCIA").reduce((a, h) => a + h.monto, 0);
+
+  const evolucionSaldo = useMemo(() => {
+    const saldoInicialTotal = participantes.reduce((a, p) => a + p.saldo_inicial, 0);
+    const ordenAsc = [...historial].sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const porFecha = new Map<string, number>();
+    for (const h of ordenAsc) {
+      porFecha.set(h.fecha, (porFecha.get(h.fecha) ?? 0) + h.monto);
+    }
+    let corrida = saldoInicialTotal;
+    const puntos = [{ etiqueta: "Inicio", saldo: corrida }];
+    for (const [fecha, delta] of Array.from(porFecha.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+      corrida += delta;
+      puntos.push({ etiqueta: new Date(fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" }), saldo: corrida });
+    }
+    return puntos;
+  }, [historial, participantes]);
 
   function limpiarForm() {
     setAccion(null);
@@ -136,6 +154,16 @@ export default function InversionPage() {
         segun los sueldos del mes.
       </p>
 
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-slate-500">Evolucion del fondo</h2>
+          <span className="text-xs text-slate-400">Ganancia acumulada: {formatoPesos(gananciaAcumulada)}</span>
+        </div>
+        <div className="rounded-2xl bg-white p-2 ring-1 ring-slate-200">
+          <EvolucionSaldoChart datos={evolucionSaldo} />
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
@@ -199,7 +227,7 @@ export default function InversionPage() {
       <div>
         <h2 className="mb-2 text-sm font-medium text-slate-500">Historial</h2>
         <div className="space-y-1">
-          {historial.map((h) => {
+          {historial.slice(0, 30).map((h) => {
             const nombre = participantes.find((p) => p.id === h.participante_id)?.nombre ?? "?";
             return (
               <div key={h.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-slate-200">
