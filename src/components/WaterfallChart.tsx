@@ -12,7 +12,7 @@ type Paso = {
 const COLORES: Record<Paso["tipo"], string> = {
   ingreso: "#2563eb",
   salida: "#ea580c",
-  resultado: "#64748b",
+  resultado: "#8A7A63",
 };
 
 export function WaterfallChart({ pasos }: { pasos: Paso[] }) {
@@ -41,11 +41,11 @@ export function WaterfallChart({ pasos }: { pasos: Paso[] }) {
             angle={-35}
             textAnchor="end"
             height={60}
-            tick={{ fontSize: 11, fill: "#64748b" }}
+            tick={{ fontSize: 11, fill: "#8A7A63" }}
           />
           <YAxis
             tickFormatter={(v) => `$${Math.round(v / 1000)}k`}
-            tick={{ fontSize: 11, fill: "#94a3b8" }}
+            tick={{ fontSize: 11, fill: "#B3A588" }}
             width={48}
           />
           <Tooltip
@@ -53,7 +53,7 @@ export function WaterfallChart({ pasos }: { pasos: Paso[] }) {
               const real = (item?.payload as { real?: number } | undefined)?.real ?? 0;
               return [formatoPesos(real), "Monto"];
             }}
-            labelStyle={{ color: "#0f172a" }}
+            labelStyle={{ color: "#4A3D2A" }}
           />
           <Bar dataKey="base" stackId="a" fill="transparent" isAnimationActive={false} />
           <Bar dataKey="valor" stackId="a" radius={[4, 4, 4, 4]} isAnimationActive={false}>

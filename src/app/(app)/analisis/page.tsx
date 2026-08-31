@@ -248,7 +248,7 @@ export default function AnalisisPage() {
   }
 
   if (cargando) {
-    return <div className="flex min-h-[60dvh] items-center justify-center text-slate-400">Cargando...</div>;
+    return <div className="flex min-h-[60dvh] items-center justify-center text-taupe/70">Cargando...</div>;
   }
 
   return (
@@ -265,8 +265,8 @@ export default function AnalisisPage() {
               }}
               className={`flex-1 rounded-full py-1.5 text-xs font-medium ${
                 modoRango === "RAPIDO" && rangoMeses === r
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+                  ? "bg-ink text-white"
+                  : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
               }`}
             >
               {r} meses
@@ -276,7 +276,7 @@ export default function AnalisisPage() {
             type="button"
             onClick={() => setModoRango("PERSONALIZADO")}
             className={`flex-1 rounded-full py-1.5 text-xs font-medium ${
-              modoRango === "PERSONALIZADO" ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+              modoRango === "PERSONALIZADO" ? "bg-ink text-white" : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
             }`}
           >
             Elegir meses
@@ -284,13 +284,13 @@ export default function AnalisisPage() {
         </div>
 
         {modoRango === "PERSONALIZADO" && (
-          <div className="mt-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
+          <div className="mt-2 rounded-2xl bg-white p-3 ring-1 ring-sand">
             <div className="mb-2 flex items-center justify-between">
-              <button type="button" onClick={() => setAnioPersonalizado((a) => a - 1)} className="px-2 text-slate-500">
+              <button type="button" onClick={() => setAnioPersonalizado((a) => a - 1)} className="px-2 text-taupe">
                 ‹
               </button>
-              <span className="text-sm font-medium text-slate-700">{anioPersonalizado}</span>
-              <button type="button" onClick={() => setAnioPersonalizado((a) => a + 1)} className="px-2 text-slate-500">
+              <span className="text-sm font-medium text-ink">{anioPersonalizado}</span>
+              <button type="button" onClick={() => setAnioPersonalizado((a) => a + 1)} className="px-2 text-taupe">
                 ›
               </button>
             </div>
@@ -303,8 +303,8 @@ export default function AnalisisPage() {
                     key={periodo}
                     type="button"
                     onClick={() => alternarMes(periodo)}
-                    className={`rounded-lg py-1.5 text-xs font-medium ${
-                      seleccionado ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                    className={`rounded-xl py-1.5 text-xs font-medium ${
+                      seleccionado ? "bg-clay text-white" : "bg-cream text-ink/70"
                     }`}
                   >
                     {nombreMes}
@@ -313,12 +313,12 @@ export default function AnalisisPage() {
               })}
             </div>
             {mesesSeleccionados.size === 0 ? (
-              <p className="mt-2 text-xs text-slate-400">Elige uno o mas meses para filtrar.</p>
+              <p className="mt-2 text-xs text-taupe/70">Elige uno o mas meses para filtrar.</p>
             ) : (
-              <div className="mt-3 border-t border-slate-100 pt-2">
+              <div className="mt-3 border-t border-sand/60 pt-2">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400">Meses elegidos (de cualquier año)</span>
-                  <button type="button" onClick={() => setMesesSeleccionados(new Set())} className="text-[11px] text-blue-600">
+                  <span className="text-[11px] text-taupe/70">Meses elegidos (de cualquier año)</span>
+                  <button type="button" onClick={() => setMesesSeleccionados(new Set())} className="text-[11px] text-clay">
                     Limpiar todo
                   </button>
                 </div>
@@ -330,7 +330,7 @@ export default function AnalisisPage() {
                         key={p}
                         type="button"
                         onClick={() => alternarMes(p)}
-                        className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700"
+                        className="rounded-full bg-clay/10 px-2 py-1 text-[11px] font-medium text-clayDark"
                       >
                         {etiquetaPeriodo(p)} ✕
                       </button>
@@ -343,8 +343,8 @@ export default function AnalisisPage() {
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-500">Chequeos de salud (mes actual)</h2>
-        <div className="space-y-1.5 rounded-2xl bg-white p-3 ring-1 ring-slate-200">
+        <h2 className="mb-2 text-sm font-medium text-taupe">Chequeos de salud (mes actual)</h2>
+        <div className="space-y-1.5 rounded-2xl bg-white p-3 ring-1 ring-sand">
           {chequeos.map((c) => {
             const puedeAbrir = !!c.lista && c.lista.length > 0;
             const abierto = chequeoAbierto === c.nombre;
@@ -358,7 +358,7 @@ export default function AnalisisPage() {
                 >
                   <div className="flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${c.ok ? "bg-emerald-500" : "bg-red-500"}`} />
-                    <span className="text-slate-700">{c.nombre}</span>
+                    <span className="text-ink">{c.nombre}</span>
                   </div>
                   <span className={c.ok ? "text-emerald-600" : "text-red-600"}>
                     {c.detalle}
@@ -366,7 +366,7 @@ export default function AnalisisPage() {
                   </span>
                 </button>
                 {abierto && c.lista && (
-                  <ul className="mt-1 space-y-0.5 pl-4 text-xs text-slate-500">
+                  <ul className="mt-1 space-y-0.5 pl-4 text-xs text-taupe">
                     {c.lista.map((nombre) => (
                       <li key={nombre}>• {nombre}</li>
                     ))}
@@ -379,21 +379,21 @@ export default function AnalisisPage() {
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-500">Ahorro recurrente vs no recurrente</h2>
-        <div className="rounded-2xl bg-white p-2 ring-1 ring-slate-200">
+        <h2 className="mb-2 text-sm font-medium text-taupe">Ahorro recurrente vs no recurrente</h2>
+        <div className="rounded-2xl bg-white p-2 ring-1 ring-sand">
           <AhorroChart datos={evolucionAhorro} />
         </div>
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-500">Caja neta de los departamentos</h2>
-        <div className="space-y-1 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+        <h2 className="mb-2 text-sm font-medium text-taupe">Caja neta de los departamentos</h2>
+        <div className="space-y-1 rounded-2xl bg-white p-4 ring-1 ring-sand">
           <Linea etiqueta="Arriendos recibidos" valor={cajaDeptos.arriendos} />
           <Linea etiqueta="Cuotas" valor={-cajaDeptos.cuotas} />
           <Linea etiqueta="Contribuciones" valor={-cajaDeptos.contribuciones} />
-          <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
-            <span className="text-sm font-medium text-slate-700">Caja neta</span>
-            <span className={`text-lg font-semibold ${cajaDeptos.neta < 0 ? "text-red-600" : "text-slate-900"}`}>
+          <div className="mt-2 flex items-center justify-between border-t border-sand/60 pt-2">
+            <span className="text-sm font-medium text-ink">Caja neta</span>
+            <span className={`text-lg font-semibold ${cajaDeptos.neta < 0 ? "text-red-600" : "text-ink"}`}>
               {formatoPesos(cajaDeptos.neta)}
             </span>
           </div>
@@ -401,7 +401,7 @@ export default function AnalisisPage() {
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-500">Por categoria</h2>
+        <h2 className="mb-2 text-sm font-medium text-taupe">Por categoria</h2>
 
         <div className="mb-2 flex flex-wrap gap-2">
           {(["GASTO", "INGRESO", "TODOS"] as const).map((t) => (
@@ -413,7 +413,7 @@ export default function AnalisisPage() {
                 setFiltroGrupo("TODOS");
               }}
               className={`rounded-full px-3 py-1 text-xs font-medium ${
-                filtroTipo === t ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+                filtroTipo === t ? "bg-clay text-white" : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
               }`}
             >
               {t === "GASTO" ? "Gasto" : t === "INGRESO" ? "Ingreso" : "Todos"}
@@ -425,7 +425,7 @@ export default function AnalisisPage() {
           <select
             value={filtroGrupo}
             onChange={(e) => setFiltroGrupo(e.target.value)}
-            className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
+            className="rounded-xl border border-sand px-2 py-1 text-xs"
           >
             <option value="TODOS">Todos los grupos</option>
             {gruposDisponibles.map((g) => (
@@ -438,7 +438,7 @@ export default function AnalisisPage() {
             type="button"
             onClick={() => setSoloAlerta((v) => !v)}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
-              soloAlerta ? "bg-red-600 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+              soloAlerta ? "bg-red-600 text-white" : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
             }`}
           >
             Solo con alerta
@@ -446,7 +446,7 @@ export default function AnalisisPage() {
         </div>
 
         <div className="space-y-2">
-          {porCategoria.length === 0 && <p className="text-sm text-slate-400">Sin datos para estos filtros.</p>}
+          {porCategoria.length === 0 && <p className="text-sm text-taupe/70">Sin datos para estos filtros.</p>}
           {porCategoria.map((c) => {
             const alerta = c.variacion > UMBRAL_ALERTA;
             const expandida = categoriaExpandida === c.categoria;
@@ -455,27 +455,27 @@ export default function AnalisisPage() {
                 key={c.categoria}
                 type="button"
                 onClick={() => setCategoriaExpandida(expandida ? null : c.categoria)}
-                className="w-full rounded-xl bg-white p-3 text-left ring-1 ring-slate-200"
+                className="w-full rounded-2xl bg-white p-3 text-left ring-1 ring-sand"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-700">
+                  <span className="text-sm font-medium text-ink">
                     {c.categoria}
                     {alerta && <span className="ml-1.5 text-red-600">⚠</span>}
                   </span>
                   <Sparkline valores={c.serie} color={c.tipo === "INGRESO" ? "#2563eb" : "#ea580c"} />
                 </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
+                <div className="mt-1 flex items-center justify-between text-xs text-taupe/70">
                   <span>promedio {formatoPesos(c.promedio)}</span>
                   <span
                     className={`font-medium ${
-                      c.variacion > 0.02 ? "text-red-600" : c.variacion < -0.02 ? "text-emerald-600" : "text-slate-400"
+                      c.variacion > 0.02 ? "text-red-600" : c.variacion < -0.02 ? "text-emerald-600" : "text-taupe/70"
                     }`}
                   >
                     {c.variacion > 0.02 ? "↑" : c.variacion < -0.02 ? "↓" : "→"} {Math.round(c.variacion * 100)}%
                   </span>
                 </div>
                 {expandida && (
-                  <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-500">
+                  <div className="mt-2 border-t border-sand/60 pt-2 text-xs text-taupe">
                     <div className="flex justify-between">
                       <span>3 meses anteriores</span>
                       <span>{formatoPesos(c.anteriores3)}</span>
@@ -498,8 +498,8 @@ export default function AnalisisPage() {
 function Linea({ etiqueta, valor }: { etiqueta: string; valor: number }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-slate-500">{etiqueta}</span>
-      <span className="text-slate-700">{formatoPesos(valor)}</span>
+      <span className="text-taupe">{etiqueta}</span>
+      <span className="text-ink">{formatoPesos(valor)}</span>
     </div>
   );
 }

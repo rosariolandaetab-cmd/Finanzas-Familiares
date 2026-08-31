@@ -38,7 +38,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [session]);
 
   if (session === undefined || !personaLista) {
-    return <div className="flex min-h-dvh items-center justify-center text-slate-400">Cargando...</div>;
+    return <div className="flex min-h-dvh items-center justify-center text-taupe/70">Cargando...</div>;
   }
 
   if (!session) {
@@ -47,7 +47,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider value={{ session, persona }}>
-      <div className="mx-auto flex max-w-md items-center justify-between px-4 pt-4 text-sm text-slate-400">
+      <div className="mx-auto flex max-w-md items-center justify-between px-4 pt-4 text-sm text-taupe/70">
         <span>{persona?.nombre ?? session.user.email}</span>
         <button onClick={() => supabase.auth.signOut()} className="underline">
           Salir

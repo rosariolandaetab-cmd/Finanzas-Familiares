@@ -30,7 +30,7 @@ export function Login() {
       <div className="flex min-h-dvh items-center justify-center p-6 text-center">
         <div>
           <p className="text-lg font-medium">Revisa tu correo</p>
-          <p className="mt-2 text-slate-500">
+          <p className="mt-2 text-taupe">
             Te enviamos un link a {email}. Ábrelo desde el teléfono para entrar.
           </p>
         </div>
@@ -42,7 +42,7 @@ export function Login() {
     <div className="flex min-h-dvh items-center justify-center p-6">
       <form onSubmit={enviarLink} className="w-full max-w-sm space-y-4">
         <h1 className="text-center text-2xl font-semibold">Finanzas Familiares</h1>
-        <p className="text-center text-sm text-slate-500">Entra con tu correo para registrar movimientos</p>
+        <p className="text-center text-sm text-taupe">Entra con tu correo para registrar movimientos</p>
         <input
           type="email"
           required
@@ -50,13 +50,13 @@ export function Login() {
           placeholder="tu@correo.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-xl border border-slate-300 px-4 py-3 text-lg"
+          className="w-full rounded-2xl border border-sand px-4 py-3 text-lg"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"
           disabled={enviando}
-          className="w-full rounded-xl bg-blue-600 py-3 text-lg font-medium text-white disabled:opacity-50"
+          className="w-full rounded-2xl bg-clay py-3 text-lg font-medium text-white disabled:opacity-50"
         >
           {enviando ? "Enviando..." : "Enviarme un link para entrar"}
         </button>

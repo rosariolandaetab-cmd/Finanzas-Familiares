@@ -135,31 +135,31 @@ export default function PresupuestoPage() {
   }
 
   if (cargando) {
-    return <div className="flex min-h-[60dvh] items-center justify-center text-slate-400">Cargando...</div>;
+    return <div className="flex min-h-[60dvh] items-center justify-center text-taupe/70">Cargando...</div>;
   }
 
   return (
     <div className="mx-auto max-w-md space-y-6 p-4">
       <SelectorPeriodo periodo={periodo} onChange={setPeriodo} />
 
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+      <div className="rounded-2xl bg-white p-4 ring-1 ring-sand">
         <Linea etiqueta="1. Ingreso recurrente del mes" valor={formatoPesos(ingresoRecurrente)} />
-        <p className="mb-2 text-[11px] text-slate-400">Lo que entra de sueldo cada mes.</p>
+        <p className="mb-2 text-[11px] text-taupe/70">Lo que entra de sueldo cada mes.</p>
 
         <Linea etiqueta="2. Disponible" valor={formatoPesos(disponibleParaPresupuestar)} />
-        <p className="mb-2 text-[11px] text-slate-400">
+        <p className="mb-2 text-[11px] text-taupe/70">
           Ingreso menos lo ya gastado en fijos y deudas ({formatoPesos(gastoNoPresupuestable)}) — categorias que no
           se presupuestan aqui, pero igual descuentan apenas las registras en Registrar.
         </p>
 
-        <div className="border-t border-slate-100 pt-2">
+        <div className="border-t border-sand/60 pt-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-slate-700">3. Por asignar</span>
-            <span className={`text-xl font-semibold ${ahorroProyectado < 0 ? "text-red-600" : "text-slate-900"}`}>
+            <span className="text-sm font-medium text-ink">3. Por asignar</span>
+            <span className={`text-xl font-semibold ${ahorroProyectado < 0 ? "text-red-600" : "text-ink"}`}>
               {formatoPesos(ahorroProyectado)}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-taupe/70">
             Disponible menos los topes que le pones a cada categoria abajo (bajan solas apenas asignas $, % o
             &quot;= gasto real&quot;). Si llega a $0, ya repartiste todo.
           </p>
@@ -170,7 +170,7 @@ export default function PresupuestoPage() {
         type="button"
         onClick={copiarMesAnterior}
         disabled={copiando}
-        className="w-full rounded-xl bg-slate-100 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50"
+        className="w-full rounded-2xl bg-cream py-2.5 text-sm font-medium text-ink disabled:opacity-50"
       >
         {copiando ? "Copiando..." : "Copiar topes del mes anterior"}
       </button>
@@ -184,24 +184,24 @@ export default function PresupuestoPage() {
           const pct = v && v.tope > 0 ? Math.min(100, Math.round((v.gastado / v.tope) * 100)) : 0;
 
           return (
-            <div key={c.id} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+            <div key={c.id} className="rounded-2xl bg-white p-3 ring-1 ring-sand">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-700">{c.nombre}</span>
+                <span className="text-sm font-medium text-ink">{c.nombre}</span>
                 {v && (
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-taupe">
                     {formatoPesos(v.gastado)} {esReal ? "" : `/ ${formatoPesos(v.tope)}`}
                   </span>
                 )}
               </div>
 
               {v && (
-                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-cream">
                   <div className={`h-full ${esReal ? "bg-sky-400" : CLASES_SEMAFORO[color]}`} style={{ width: `${pct}%` }} />
                 </div>
               )}
 
               <div className="mt-2 flex items-center gap-2">
-                <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs">
+                <div className="flex rounded-xl bg-cream p-0.5 text-xs">
                   {(["FIJO", "PORCENTAJE", "REAL"] as TipoTope[]).map((t) => (
                     <button
                       key={t}
@@ -211,8 +211,8 @@ export default function PresupuestoPage() {
                         setEdiciones((prev) => ({ ...prev, [c.id]: nuevaFila }));
                         if (t === "REAL") guardarFila(c.id, nuevaFila);
                       }}
-                      className={`rounded-md px-2 py-1 ${
-                        fila.tipo === t ? "bg-white font-medium text-slate-900 shadow-sm" : "text-slate-500"
+                      className={`rounded-lg px-2 py-1 ${
+                        fila.tipo === t ? "bg-white font-medium text-ink shadow-sm" : "text-taupe"
                       }`}
                     >
                       {t === "FIJO" ? "$" : t === "PORCENTAJE" ? "%" : "= gasto real"}
@@ -232,7 +232,7 @@ export default function PresupuestoPage() {
                       }))
                     }
                     onBlur={() => guardarFila(c.id, fila)}
-                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    className="flex-1 rounded-xl border border-sand px-2 py-1.5 text-sm"
                   />
                 )}
               </div>
@@ -253,8 +253,8 @@ export default function PresupuestoPage() {
 function Linea({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-slate-500">{etiqueta}</span>
-      <span className="font-medium text-slate-700">{valor}</span>
+      <span className="text-taupe">{etiqueta}</span>
+      <span className="font-medium text-ink">{valor}</span>
     </div>
   );
 }

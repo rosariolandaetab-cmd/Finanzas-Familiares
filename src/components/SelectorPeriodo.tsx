@@ -14,16 +14,16 @@ export function SelectorPeriodo({
       <button
         type="button"
         onClick={() => onChange(sumarMesesAPeriodo(periodo, -1))}
-        className="rounded-lg px-3 py-1.5 text-lg text-slate-500"
+        className="rounded-xl px-3 py-1.5 text-lg text-taupe"
         aria-label="Mes anterior"
       >
         ‹
       </button>
-      <span className="text-base font-semibold capitalize text-slate-900">{etiquetaPeriodo(periodo)}</span>
+      <span className="text-base font-semibold capitalize text-ink">{etiquetaPeriodo(periodo)}</span>
       <button
         type="button"
         onClick={() => onChange(sumarMesesAPeriodo(periodo, 1))}
-        className="rounded-lg px-3 py-1.5 text-lg text-slate-500"
+        className="rounded-xl px-3 py-1.5 text-lg text-taupe"
         aria-label="Mes siguiente"
       >
         ›

@@ -81,14 +81,14 @@ export default function HistorialPage() {
     <div className="mx-auto max-w-md space-y-4 p-4">
       <div className="flex items-center justify-between">
         {todosLosMeses ? (
-          <span className="text-sm font-medium text-slate-500">Todos los meses</span>
+          <span className="text-sm font-medium text-taupe">Todos los meses</span>
         ) : (
           <SelectorPeriodo periodo={periodo} onChange={setPeriodo} />
         )}
         <button
           type="button"
           onClick={() => setTodosLosMeses((v) => !v)}
-          className="text-xs text-blue-600 underline"
+          className="text-xs text-clay underline"
         >
           {todosLosMeses ? "Filtrar por mes" : "Ver todos"}
         </button>
@@ -102,7 +102,7 @@ export default function HistorialPage() {
             setCategoriaId("");
           }}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
-            tipoFlujo === "" ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+            tipoFlujo === "" ? "bg-clay text-white" : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
           }`}
         >
           Todos
@@ -116,7 +116,7 @@ export default function HistorialPage() {
               setCategoriaId("");
             }}
             className={`rounded-full px-3 py-1 text-xs font-medium ${
-              tipoFlujo === t.valor ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+              tipoFlujo === t.valor ? "bg-clay text-white" : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
             }`}
           >
             {t.etiqueta}
@@ -128,7 +128,7 @@ export default function HistorialPage() {
         <select
           value={categoriaId}
           onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
-          className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+          className="rounded-xl border border-sand px-2 py-2 text-sm"
         >
           <option value="">Todas las categorias</option>
           {categorias
@@ -142,7 +142,7 @@ export default function HistorialPage() {
         <select
           value={personaId}
           onChange={(e) => setPersonaId(e.target.value ? Number(e.target.value) : "")}
-          className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+          className="rounded-xl border border-sand px-2 py-2 text-sm"
         >
           <option value="">Toda persona</option>
           {personas.map((p) => (
@@ -154,7 +154,7 @@ export default function HistorialPage() {
         <select
           value={estado}
           onChange={(e) => setEstado(e.target.value as EstadoMov | "")}
-          className="col-span-2 rounded-lg border border-slate-300 px-2 py-2 text-sm"
+          className="col-span-2 rounded-xl border border-sand px-2 py-2 text-sm"
         >
           <option value="">Todo estado</option>
           <option value="PAGADO">Pagado</option>
@@ -163,9 +163,9 @@ export default function HistorialPage() {
       </div>
 
       {cargando ? (
-        <p className="py-8 text-center text-slate-400">Cargando...</p>
+        <p className="py-8 text-center text-taupe/70">Cargando...</p>
       ) : movimientos.length === 0 ? (
-        <p className="py-8 text-center text-slate-400">No hay movimientos con estos filtros.</p>
+        <p className="py-8 text-center text-taupe/70">No hay movimientos con estos filtros.</p>
       ) : (
         <div className="space-y-2">
           {movimientos.map((m) =>
@@ -187,12 +187,12 @@ export default function HistorialPage() {
                 key={m.id}
                 type="button"
                 onClick={() => setEditandoId(m.id)}
-                className="w-full rounded-xl bg-white p-3 text-left ring-1 ring-slate-200"
+                className="w-full rounded-2xl bg-white p-3 text-left ring-1 ring-sand"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{m.categoria}</p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-sm font-medium text-ink">{m.categoria}</p>
+                    <p className="text-xs text-taupe/70">
                       {new Date(m.fecha_compra + "T00:00:00").toLocaleDateString("es-CL")}
                       {m.comentario ? ` · ${m.comentario}` : ""}
                     </p>
@@ -201,9 +201,9 @@ export default function HistorialPage() {
                     <p
                       className={`text-sm font-semibold ${
                         m.tipo_flujo === "INGRESO"
-                          ? "text-blue-600"
+                          ? "text-clay"
                           : m.tipo_flujo === "TRANSFERENCIA"
-                          ? "text-slate-500"
+                          ? "text-taupe"
                           : "text-orange-600"
                       }`}
                     >
@@ -251,12 +251,12 @@ function FilaEdicion({
 
   if (esDeInversion) {
     return (
-      <div className="space-y-2 rounded-xl bg-white p-3 ring-2 ring-blue-500">
-        <p className="text-sm text-slate-600">
+      <div className="space-y-2 rounded-2xl bg-white p-3 ring-2 ring-clay">
+        <p className="text-sm text-ink/70">
           Este movimiento tiene el detalle de reparto por persona en la pestana Inversion. Para editarlo o borrarlo,
           hazlo desde ahi para que no se desincronice.
         </p>
-        <button type="button" onClick={onCancelar} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">
+        <button type="button" onClick={onCancelar} className="rounded-xl bg-cream px-3 py-2 text-sm">
           Cerrar
         </button>
       </div>
@@ -283,18 +283,18 @@ function FilaEdicion({
   }
 
   return (
-    <div className="space-y-2 rounded-xl bg-white p-3 ring-2 ring-blue-500">
+    <div className="space-y-2 rounded-2xl bg-white p-3 ring-2 ring-clay">
       <input
         type="text"
         inputMode="numeric"
         value={monto}
         onChange={(e) => setMonto(e.target.value.replace(/[^0-9-]/g, ""))}
-        className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+        className="w-full rounded-xl border border-sand px-2 py-2 text-sm"
       />
       <select
         value={categoriaId}
         onChange={(e) => setCategoriaId(Number(e.target.value))}
-        className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+        className="w-full rounded-xl border border-sand px-2 py-2 text-sm"
       >
         {categorias.map((c) => (
           <option key={c.id} value={c.id}>
@@ -305,7 +305,7 @@ function FilaEdicion({
       <select
         value={cuentaId}
         onChange={(e) => setCuentaId(Number(e.target.value))}
-        className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+        className="w-full rounded-xl border border-sand px-2 py-2 text-sm"
       >
         {cuentas.map((c) => (
           <option key={c.id} value={c.id}>
@@ -318,12 +318,12 @@ function FilaEdicion({
           type="date"
           value={fecha}
           onChange={(e) => setFecha(e.target.value)}
-          className="flex-1 rounded-lg border border-slate-300 px-2 py-2 text-sm"
+          className="flex-1 rounded-xl border border-sand px-2 py-2 text-sm"
         />
         <select
           value={estado}
           onChange={(e) => setEstado(e.target.value as EstadoMov)}
-          className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+          className="rounded-xl border border-sand px-2 py-2 text-sm"
         >
           <option value="PAGADO">Pagado</option>
           <option value="PENDIENTE">Pendiente</option>
@@ -334,21 +334,21 @@ function FilaEdicion({
         placeholder="Comentario"
         value={comentario}
         onChange={(e) => setComentario(e.target.value)}
-        className="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+        className="w-full rounded-xl border border-sand px-2 py-2 text-sm"
       />
       <div className="flex gap-2 pt-1">
         <button
           type="button"
           onClick={guardar}
           disabled={guardando}
-          className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="flex-1 rounded-xl bg-clay py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           Guardar
         </button>
-        <button type="button" onClick={onCancelar} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">
+        <button type="button" onClick={onCancelar} className="rounded-xl bg-cream px-3 py-2 text-sm">
           Cancelar
         </button>
-        <button type="button" onClick={onBorrar} className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+        <button type="button" onClick={onBorrar} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
           Borrar
         </button>
       </div>

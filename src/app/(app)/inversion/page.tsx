@@ -12,9 +12,9 @@ type Accion = "GANANCIA" | "RETIRO" | null;
 type ModoReparto = "TODOS" | "ROCHA_LALO" | "UNO";
 
 const COLORES_PARTICIPANTE: Record<string, string> = {
-  Rocha: "#2563eb",
-  Lalo: "#ea580c",
-  "Bajo Lalo": "#64748b",
+  Rocha: "#B5602F",
+  Lalo: "#7C8A5E",
+  "Bajo Lalo": "#8A7A63",
 };
 
 export default function InversionPage() {
@@ -85,7 +85,7 @@ export default function InversionPage() {
 
   const seriesParticipantes = participantes.map((p) => ({
     nombre: p.nombre,
-    color: COLORES_PARTICIPANTE[p.nombre] ?? "#64748b",
+    color: COLORES_PARTICIPANTE[p.nombre] ?? "#8A7A63",
   }));
 
   function limpiarForm() {
@@ -139,24 +139,24 @@ export default function InversionPage() {
   }
 
   if (cargando) {
-    return <div className="flex min-h-[60dvh] items-center justify-center text-slate-400">Cargando...</div>;
+    return <div className="flex min-h-[60dvh] items-center justify-center text-taupe/70">Cargando...</div>;
   }
 
   return (
     <div className="mx-auto max-w-md space-y-6 p-4">
-      <div className="rounded-2xl bg-slate-900 p-4 text-white">
-        <p className="text-xs uppercase tracking-wide text-slate-300">Total en inversion</p>
+      <div className="rounded-2xl bg-ink p-4 text-white">
+        <p className="text-xs uppercase tracking-wide text-taupe/50">Total en inversion</p>
         <p className="mt-1 text-2xl font-semibold">{formatoPesos(totalFondo)}</p>
       </div>
 
       <div className="space-y-2">
         {saldos.map((s) => (
-          <div key={s.id} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+          <div key={s.id} className="rounded-2xl bg-white p-3 ring-1 ring-sand">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-slate-700">{s.nombre}</span>
-              <span className="text-base font-semibold text-slate-900">{formatoPesos(s.saldo_actual)}</span>
+              <span className="text-sm font-medium text-ink">{s.nombre}</span>
+              <span className="text-base font-semibold text-ink">{formatoPesos(s.saldo_actual)}</span>
             </div>
-            <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
+            <div className="mt-1 flex items-center justify-between text-xs text-taupe/70">
               <span>{totalFondo > 0 ? Math.round((Math.max(0, s.saldo_actual) / totalFondo) * 100) : 0}% del total</span>
               {editandoSaldoId === s.id ? (
                 <div className="flex items-center gap-1">
@@ -167,9 +167,9 @@ export default function InversionPage() {
                     placeholder="Saldo inicial"
                     value={saldoInicialTexto}
                     onChange={(e) => setSaldoInicialTexto(e.target.value)}
-                    className="w-28 rounded-md border border-slate-300 px-2 py-1 text-xs"
+                    className="w-28 rounded-lg border border-sand px-2 py-1 text-xs"
                   />
-                  <button onClick={() => guardarSaldoInicial(s.id)} className="text-blue-600">
+                  <button onClick={() => guardarSaldoInicial(s.id)} className="text-clay">
                     Guardar
                   </button>
                 </div>
@@ -190,17 +190,17 @@ export default function InversionPage() {
         ))}
       </div>
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-taupe/70">
         Para aportar plata a la inversion, ve a Registrar → Transferencia → Aporte a inversion. Se reparte solo
         segun los sueldos del mes.
       </p>
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-slate-500">Evolucion del fondo</h2>
-          <span className="text-xs text-slate-400">Ganancia acumulada: {formatoPesos(gananciaAcumulada)}</span>
+          <h2 className="text-sm font-medium text-taupe">Evolucion del fondo</h2>
+          <span className="text-xs text-taupe/70">Ganancia acumulada: {formatoPesos(gananciaAcumulada)}</span>
         </div>
-        <div className="rounded-2xl bg-white p-2 ring-1 ring-slate-200">
+        <div className="rounded-2xl bg-white p-2 ring-1 ring-sand">
           <EvolucionParticipantesChart datos={evolucionParticipantes} series={seriesParticipantes} />
         </div>
       </div>
@@ -209,24 +209,24 @@ export default function InversionPage() {
         <button
           type="button"
           onClick={() => setAccion("GANANCIA")}
-          className="min-h-11 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white"
+          className="min-h-11 rounded-2xl bg-emerald-600 py-3 text-sm font-semibold text-white"
         >
           Registrar ganancia
         </button>
         <button
           type="button"
           onClick={() => setAccion("RETIRO")}
-          className="min-h-11 rounded-xl bg-orange-600 py-3 text-sm font-semibold text-white"
+          className="min-h-11 rounded-2xl bg-orange-600 py-3 text-sm font-semibold text-white"
         >
           Retirar
         </button>
       </div>
 
       {accion && (
-        <div className="space-y-2 rounded-xl bg-white p-3 ring-2 ring-blue-500">
+        <div className="space-y-2 rounded-2xl bg-white p-3 ring-2 ring-clay">
           {accion === "GANANCIA" ? (
             <div>
-              <p className="mb-1.5 text-sm font-medium text-slate-700">Repartir entre</p>
+              <p className="mb-1.5 text-sm font-medium text-ink">Repartir entre</p>
               <div className="flex flex-wrap gap-2">
                 {(
                   [
@@ -240,7 +240,7 @@ export default function InversionPage() {
                     type="button"
                     onClick={() => setModoReparto(op.valor)}
                     className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                      modoReparto === op.valor ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                      modoReparto === op.valor ? "bg-clay text-white" : "bg-cream text-ink/70"
                     }`}
                   >
                     {op.etiqueta}
@@ -255,7 +255,7 @@ export default function InversionPage() {
                       type="button"
                       onClick={() => setParticipanteUnico(p.id)}
                       className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                        participanteUnico === p.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                        participanteUnico === p.id ? "bg-clay text-white" : "bg-cream text-ink/70"
                       }`}
                     >
                       {p.nombre}
@@ -265,7 +265,7 @@ export default function InversionPage() {
               )}
             </div>
           ) : (
-            <p className="text-sm font-medium text-slate-700">Retiro entre Rocha y Lalo</p>
+            <p className="text-sm font-medium text-ink">Retiro entre Rocha y Lalo</p>
           )}
           <input
             type="text"
@@ -274,31 +274,31 @@ export default function InversionPage() {
             placeholder="$0"
             value={monto}
             onChange={(e) => setMonto(e.target.value.replace(/[^0-9]/g, ""))}
-            className="w-full rounded-lg border border-slate-300 px-3 py-3 text-center text-2xl font-semibold"
+            className="w-full rounded-xl border border-sand px-3 py-3 text-center text-2xl font-semibold"
           />
           <input
             type="date"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-sand px-3 py-2 text-sm"
           />
           <input
             type="text"
             placeholder="Comentario (opcional)"
             value={comentario}
             onChange={(e) => setComentario(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-sand px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={confirmar}
               disabled={guardando || !monto || (accion === "GANANCIA" && modoReparto === "UNO" && !participanteUnico)}
-              className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="flex-1 rounded-xl bg-clay py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {guardando ? "Guardando..." : "Confirmar"}
             </button>
-            <button type="button" onClick={limpiarForm} className="rounded-lg bg-slate-100 px-3 py-2 text-sm">
+            <button type="button" onClick={limpiarForm} className="rounded-xl bg-cream px-3 py-2 text-sm">
               Cancelar
             </button>
           </div>
@@ -306,16 +306,16 @@ export default function InversionPage() {
       )}
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-500">Historial</h2>
+        <h2 className="mb-2 text-sm font-medium text-taupe">Historial</h2>
         <div className="space-y-1">
           {historial.slice(0, 30).map((h) => {
             const nombre = participantes.find((p) => p.id === h.participante_id)?.nombre ?? "?";
             return (
-              <div key={h.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-slate-200">
+              <div key={h.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-sand">
                 <div>
-                  <span className="font-medium text-slate-700">{nombre}</span>
-                  <span className="ml-2 text-xs text-slate-400">{h.tipo.toLowerCase()}</span>
-                  <p className="text-xs text-slate-400">{new Date(h.fecha + "T00:00:00").toLocaleDateString("es-CL")}</p>
+                  <span className="font-medium text-ink">{nombre}</span>
+                  <span className="ml-2 text-xs text-taupe/70">{h.tipo.toLowerCase()}</span>
+                  <p className="text-xs text-taupe/70">{new Date(h.fecha + "T00:00:00").toLocaleDateString("es-CL")}</p>
                 </div>
                 <span className={h.monto < 0 ? "text-orange-600" : "text-emerald-600"}>{formatoPesos(h.monto)}</span>
               </div>
@@ -325,7 +325,7 @@ export default function InversionPage() {
       </div>
 
       {mensaje && (
-        <p className="fixed inset-x-0 bottom-20 mx-auto w-fit rounded-full bg-slate-900 px-4 py-2 text-sm text-white shadow-lg">
+        <p className="fixed inset-x-0 bottom-20 mx-auto w-fit rounded-full bg-ink px-4 py-2 text-sm text-white shadow-lg">
           {mensaje}
         </p>
       )}

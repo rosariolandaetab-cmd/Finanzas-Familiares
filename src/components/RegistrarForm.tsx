@@ -195,7 +195,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   }
 
   if (cargando) {
-    return <div className="flex min-h-dvh items-center justify-center text-slate-400">Cargando...</div>;
+    return <div className="flex min-h-dvh items-center justify-center text-taupe/70">Cargando...</div>;
   }
 
   if (errorCarga) {
@@ -209,13 +209,13 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   return (
     <div className="mx-auto max-w-md space-y-6 p-4">
       {pendientesSync > 0 && (
-        <p className="rounded-lg bg-amber-100 px-3 py-2 text-center text-sm text-amber-800">
+        <p className="rounded-xl bg-amber-100 px-3 py-2 text-center text-sm text-amber-800">
           {pendientesSync} movimiento(s) esperando señal para sincronizar
         </p>
       )}
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-500">Monto</label>
+        <label className="mb-1 block text-sm font-medium text-taupe">Monto</label>
         <input
           type="text"
           inputMode="numeric"
@@ -223,7 +223,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
           placeholder="$0"
           value={montoTexto ? `$${formatoPesos(montoNumero)}` : ""}
           onChange={(e) => setMontoTexto(e.target.value.replace(/[^0-9]/g, ""))}
-          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-5 text-center text-4xl font-semibold tracking-tight"
+          className="w-full rounded-2xl border border-sand bg-white px-4 py-5 text-center text-4xl font-semibold tracking-tight"
         />
       </div>
 
@@ -244,8 +244,8 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
             }}
             className={`flex-1 rounded-full py-2 text-sm font-medium transition ${
               tipo === t.valor
-                ? "bg-slate-900 text-white"
-                : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+                ? "bg-ink text-white"
+                : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
             }`}
           >
             {t.etiqueta}
@@ -254,7 +254,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
       </div>
 
       <div>
-        <label className="mb-2 block text-sm font-medium text-slate-500">Categoria</label>
+        <label className="mb-2 block text-sm font-medium text-taupe">Categoria</label>
 
         {grupos.length > 1 && (
           <div className="mb-2 flex flex-wrap gap-2">
@@ -263,8 +263,8 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
               onClick={() => setGrupoSeleccionado(null)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium ${
                 grupoSeleccionado === null
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+                  ? "bg-clay text-white"
+                  : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
               }`}
             >
               Mas usadas
@@ -276,8 +276,8 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
                 onClick={() => setGrupoSeleccionado(g)}
                 className={`rounded-full px-3 py-1.5 text-xs font-medium ${
                   grupoSeleccionado === g
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+                    ? "bg-clay text-white"
+                    : "bg-white text-ink/70 ring-1 ring-inset ring-sand"
                 }`}
               >
                 {g}
@@ -292,10 +292,10 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
               key={c.id}
               type="button"
               onClick={() => setCategoriaId(c.id)}
-              className={`rounded-xl px-3 py-3 text-left text-sm font-medium ${
+              className={`rounded-2xl px-3 py-3 text-left text-sm font-medium ${
                 categoriaId === c.id
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-slate-700 ring-1 ring-inset ring-slate-300"
+                  ? "bg-clay text-white"
+                  : "bg-white text-ink ring-1 ring-inset ring-sand"
               }`}
             >
               {c.nombre}
@@ -306,14 +306,14 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
       {requiereMedioPago && (
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-500">Medio de pago</label>
+          <label className="mb-2 block text-sm font-medium text-taupe">Medio de pago</label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setMedioPago("DEBITO")}
               disabled={!cuentaCorriente}
-              className={`rounded-xl py-4 text-sm font-semibold disabled:opacity-40 ${
-                medioPago === "DEBITO" ? "bg-slate-900 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
+              className={`rounded-2xl py-4 text-sm font-semibold disabled:opacity-40 ${
+                medioPago === "DEBITO" ? "bg-ink text-white" : "bg-white ring-1 ring-inset ring-sand"
               }`}
             >
               Debito
@@ -322,8 +322,8 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
               type="button"
               onClick={() => setMedioPago("CREDITO")}
               disabled={tarjetas.length === 0}
-              className={`rounded-xl py-4 text-sm font-semibold disabled:opacity-40 ${
-                medioPago === "CREDITO" ? "bg-slate-900 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
+              className={`rounded-2xl py-4 text-sm font-semibold disabled:opacity-40 ${
+                medioPago === "CREDITO" ? "bg-ink text-white" : "bg-white ring-1 ring-inset ring-sand"
               }`}
             >
               Credito
@@ -339,7 +339,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
                       type="button"
                       onClick={() => setTarjetaId(t.id)}
                       className={`rounded-full px-3 py-2 text-sm ${
-                        tarjetaId === t.id ? "bg-blue-600 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
+                        tarjetaId === t.id ? "bg-clay text-white" : "bg-white ring-1 ring-inset ring-sand"
                       }`}
                     >
                       {t.banco ?? t.nombre} •{t.ultimos4}
@@ -353,8 +353,8 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
                     key={e}
                     type="button"
                     onClick={() => setEstadoCredito(e)}
-                    className={`flex-1 rounded-lg py-2 text-xs font-medium ${
-                      estadoCredito === e ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                    className={`flex-1 rounded-xl py-2 text-xs font-medium ${
+                      estadoCredito === e ? "bg-clay text-white" : "bg-cream text-ink/70"
                     }`}
                   >
                     {e === "PENDIENTE" ? "Pendiente (aun no se paga)" : "Ya pagado"}
@@ -368,24 +368,24 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
       <div className="flex gap-4">
         <div className="flex-1">
-          <label className="mb-1 block text-sm font-medium text-slate-500">Fecha</label>
+          <label className="mb-1 block text-sm font-medium text-taupe">Fecha</label>
           <input
             type="date"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 px-3 py-3 text-base"
+            className="w-full rounded-2xl border border-sand px-3 py-3 text-base"
           />
         </div>
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-500">Comentario (opcional)</label>
+        <label className="mb-1 block text-sm font-medium text-taupe">Comentario (opcional)</label>
         <input
           type="text"
           value={comentario}
           onChange={(e) => setComentario(e.target.value)}
           placeholder="Ej: almuerzo con amigos"
-          className="w-full rounded-xl border border-slate-300 px-3 py-3 text-base"
+          className="w-full rounded-2xl border border-sand px-3 py-3 text-base"
         />
       </div>
 
@@ -393,13 +393,13 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
         type="button"
         onClick={guardar}
         disabled={!puedeGuardar}
-        className="w-full rounded-2xl bg-blue-600 py-4 text-lg font-semibold text-white disabled:opacity-40"
+        className="w-full rounded-2xl bg-clay py-4 text-lg font-semibold text-white disabled:opacity-40"
       >
         {guardando ? "Guardando..." : "Guardar"}
       </button>
 
       {mensaje && (
-        <p className="fixed inset-x-0 bottom-4 mx-auto w-fit rounded-full bg-slate-900 px-4 py-2 text-sm text-white shadow-lg">
+        <p className="fixed inset-x-0 bottom-4 mx-auto w-fit rounded-full bg-ink px-4 py-2 text-sm text-white shadow-lg">
           {mensaje}
         </p>
       )}
