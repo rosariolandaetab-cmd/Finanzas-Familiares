@@ -33,6 +33,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<string | null>(null);
   const [medioPago, setMedioPago] = useState<MedioPago | null>(null);
   const [tarjetaId, setTarjetaId] = useState<number | null>(null);
+  const [estadoCredito, setEstadoCredito] = useState<"PENDIENTE" | "PAGADO">("PENDIENTE");
   const [fecha, setFecha] = useState(hoyISO());
   const [comentario, setComentario] = useState("");
 
@@ -97,6 +98,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
   const cuentaCorriente = useMemo(() => cuentas.find((c) => c.tipo === "CORRIENTE"), [cuentas]);
   const tarjetas = useMemo(() => cuentas.filter((c) => c.tipo === "TARJETA_CREDITO"), [cuentas]);
+  const requiereMedioPago = tipo === "GASTO";
 
   useEffect(() => {
     if (medioPago === "CREDITO" && tarjetas.length === 1) {
@@ -104,16 +106,23 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     }
   }, [medioPago, tarjetas]);
 
+  useEffect(() => {
+    // Ingreso y Transferencia siempre van a la cuenta corriente: no hay
+    // nada que elegir, así que no se le pregunta a la persona.
+    if (!requiereMedioPago) setMedioPago("DEBITO");
+  }, [requiereMedioPago]);
+
   const montoNumero = Number(montoTexto || "0");
 
-  const cuentaResuelta: Cuenta | undefined =
-    medioPago === "DEBITO"
-      ? cuentaCorriente
-      : medioPago === "CREDITO"
-      ? tarjetas.find((t) => t.id === tarjetaId)
-      : undefined;
+  const cuentaResuelta: Cuenta | undefined = !requiereMedioPago
+    ? cuentaCorriente
+    : medioPago === "DEBITO"
+    ? cuentaCorriente
+    : medioPago === "CREDITO"
+    ? tarjetas.find((t) => t.id === tarjetaId)
+    : undefined;
 
-  const faltaElegirTarjeta = medioPago === "CREDITO" && tarjetas.length > 1 && !tarjetaId;
+  const faltaElegirTarjeta = requiereMedioPago && medioPago === "CREDITO" && tarjetas.length > 1 && !tarjetaId;
 
   const puedeGuardar =
     montoNumero > 0 && categoriaId !== null && !!cuentaResuelta && !faltaElegirTarjeta && !guardando;
@@ -125,6 +134,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     setGrupoSeleccionado(null);
     setMedioPago(null);
     setTarjetaId(null);
+    setEstadoCredito("PENDIENTE");
     setFecha(hoyISO());
     setComentario("");
   }
@@ -133,14 +143,15 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     if (!puedeGuardar || !cuentaResuelta || categoriaId === null) return;
     setGuardando(true);
 
-    const esCredito = medioPago === "CREDITO";
+    const esCredito = requiereMedioPago && medioPago === "CREDITO";
+    const estado = esCredito ? estadoCredito : "PAGADO";
     const mov: MovimientoInsert = {
       fecha_compra: fecha,
-      fecha_caja: esCredito ? null : fecha,
+      fecha_caja: estado === "PAGADO" ? fecha : null,
       categoria_id: categoriaId,
       monto: montoNumero,
       cuenta_id: cuentaResuelta.id,
-      estado: esCredito ? "PENDIENTE" : "PAGADO",
+      estado,
       comentario: comentario.trim() || null,
       origen: "MANUAL",
       creado_por: persona?.id ?? null,
@@ -225,6 +236,11 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
               setTipo(t.valor);
               setCategoriaId(null);
               setGrupoSeleccionado(null);
+              if (t.valor === "GASTO") {
+                setMedioPago(null);
+                setTarjetaId(null);
+                setEstadoCredito("PENDIENTE");
+              }
             }}
             className={`flex-1 rounded-full py-2 text-sm font-medium transition ${
               tipo === t.valor
@@ -288,47 +304,67 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
         </div>
       </div>
 
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-500">Medio de pago</label>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setMedioPago("DEBITO")}
-            disabled={!cuentaCorriente}
-            className={`rounded-xl py-4 text-sm font-semibold disabled:opacity-40 ${
-              medioPago === "DEBITO" ? "bg-slate-900 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
-            }`}
-          >
-            Debito
-          </button>
-          <button
-            type="button"
-            onClick={() => setMedioPago("CREDITO")}
-            disabled={tarjetas.length === 0}
-            className={`rounded-xl py-4 text-sm font-semibold disabled:opacity-40 ${
-              medioPago === "CREDITO" ? "bg-slate-900 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
-            }`}
-          >
-            Credito
-          </button>
-        </div>
-        {medioPago === "CREDITO" && tarjetas.length > 1 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {tarjetas.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTarjetaId(t.id)}
-                className={`rounded-full px-3 py-2 text-sm ${
-                  tarjetaId === t.id ? "bg-blue-600 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
-                }`}
-              >
-                {t.banco ?? t.nombre} •{t.ultimos4}
-              </button>
-            ))}
+      {requiereMedioPago && (
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-500">Medio de pago</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setMedioPago("DEBITO")}
+              disabled={!cuentaCorriente}
+              className={`rounded-xl py-4 text-sm font-semibold disabled:opacity-40 ${
+                medioPago === "DEBITO" ? "bg-slate-900 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
+              }`}
+            >
+              Debito
+            </button>
+            <button
+              type="button"
+              onClick={() => setMedioPago("CREDITO")}
+              disabled={tarjetas.length === 0}
+              className={`rounded-xl py-4 text-sm font-semibold disabled:opacity-40 ${
+                medioPago === "CREDITO" ? "bg-slate-900 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
+              }`}
+            >
+              Credito
+            </button>
           </div>
-        )}
-      </div>
+          {medioPago === "CREDITO" && (
+            <>
+              {tarjetas.length > 1 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {tarjetas.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTarjetaId(t.id)}
+                      className={`rounded-full px-3 py-2 text-sm ${
+                        tarjetaId === t.id ? "bg-blue-600 text-white" : "bg-white ring-1 ring-inset ring-slate-300"
+                      }`}
+                    >
+                      {t.banco ?? t.nombre} •{t.ultimos4}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 flex gap-2">
+                {(["PENDIENTE", "PAGADO"] as const).map((e) => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => setEstadoCredito(e)}
+                    className={`flex-1 rounded-lg py-2 text-xs font-medium ${
+                      estadoCredito === e ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {e === "PENDIENTE" ? "Pendiente (aun no se paga)" : "Ya pagado"}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-4">
         <div className="flex-1">

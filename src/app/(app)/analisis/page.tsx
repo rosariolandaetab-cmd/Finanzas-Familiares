@@ -9,6 +9,7 @@ import type { Categoria, Recurrencia, TipoFlujo, VMovimiento, VPresupuestoMes, V
 
 const RANGOS = [3, 6, 12] as const;
 const UMBRAL_ALERTA = 0.15;
+const NOMBRES_MES_CORTO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 function ultimosPeriodos(n: number) {
   const actual = periodoActual();
@@ -21,13 +22,19 @@ const CATEGORIA_ARRIENDO = "Arriendo Deptos";
 const CATEGORIA_CUOTA = "Cuota Deptos";
 const CATEGORIA_CONTRIBUCIONES = "Contribuciones deptos";
 
+type ModoRango = "RAPIDO" | "PERSONALIZADO";
+
 export default function AnalisisPage() {
   const [cargando, setCargando] = useState(true);
+  const [modoRango, setModoRango] = useState<ModoRango>("RAPIDO");
   const [rangoMeses, setRangoMeses] = useState<(typeof RANGOS)[number]>(6);
+  const [anioPersonalizado, setAnioPersonalizado] = useState(() => Number(periodoActual().slice(0, 4)));
+  const [mesesSeleccionados, setMesesSeleccionados] = useState<Set<string>>(new Set());
   const [filtroTipo, setFiltroTipo] = useState<TipoFlujo | "TODOS">("GASTO");
   const [filtroGrupo, setFiltroGrupo] = useState<string>("TODOS");
   const [soloAlerta, setSoloAlerta] = useState(false);
   const [categoriaExpandida, setCategoriaExpandida] = useState<string | null>(null);
+  const [chequeoAbierto, setChequeoAbierto] = useState<string | null>(null);
 
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [resumenes, setResumenes] = useState<VResumenMensual[]>([]);
@@ -39,12 +46,17 @@ export default function AnalisisPage() {
   const [gastoRecurrenteMesActual, setGastoRecurrenteMesActual] = useState(0);
   const [presupuestoMesActual, setPresupuestoMesActual] = useState<VPresupuestoMes[]>([]);
 
+  const periodosVentana = useMemo(() => {
+    if (modoRango === "PERSONALIZADO") return Array.from(mesesSeleccionados).sort();
+    return ultimosPeriodos(rangoMeses);
+  }, [modoRango, rangoMeses, mesesSeleccionados]);
+
   useEffect(() => {
     let cancelado = false;
     async function cargar() {
       setCargando(true);
-      const ventana = Math.max(rangoMeses, 6);
-      const periodos = ultimosPeriodos(ventana);
+      const periodosFijos = ultimosPeriodos(6);
+      const periodos = Array.from(new Set([...periodosFijos, ...periodosVentana]));
       const mesActual = periodoActual();
 
       const [
@@ -58,11 +70,13 @@ export default function AnalisisPage() {
       ] = await Promise.all([
         supabase.from("categorias").select("*").eq("activa", true),
         supabase.from("v_resumen_mensual").select("*").in("periodo", periodos),
-        supabase
-          .from("v_movimientos")
-          .select("categoria, grupo, tipo_flujo, monto, periodo_devengado, recurrencia")
-          .in("tipo_flujo", ["GASTO", "INGRESO"])
-          .in("periodo_devengado", periodos),
+        periodos.length > 0
+          ? supabase
+              .from("v_movimientos")
+              .select("categoria, grupo, tipo_flujo, monto, periodo_devengado, recurrencia")
+              .in("tipo_flujo", ["GASTO", "INGRESO"])
+              .in("periodo_devengado", periodos)
+          : Promise.resolve({ data: [] }),
         supabase
           .from("v_movimientos")
           .select("categoria, monto")
@@ -90,9 +104,9 @@ export default function AnalisisPage() {
     return () => {
       cancelado = true;
     };
-  }, [rangoMeses]);
+  }, [periodosVentana]);
 
-  const periodosVentana = useMemo(() => ultimosPeriodos(rangoMeses), [rangoMeses]);
+  const cantidadMesesVentana = periodosVentana.length || 1;
 
   const evolucionAhorro = useMemo(() => {
     const gastoPorPeriodoYRecurrencia = (periodo: string, recurrencia: Recurrencia) =>
@@ -105,7 +119,7 @@ export default function AnalisisPage() {
       const gastoRecurrente = gastoPorPeriodoYRecurrencia(p, "RECURRENTE");
       const gastoExtraordinario = gastoPorPeriodoYRecurrencia(p, "EXTRAORDINARIO");
       return {
-        etiqueta: etiquetaPeriodo(p).split(" ")[0].slice(0, 3),
+        etiqueta: etiquetaPeriodo(p).split(" ")[0].slice(0, 3) + " " + p.slice(2, 4),
         ahorroRecurrente: (r?.ingreso_recurrente ?? 0) - gastoRecurrente,
         ahorroNoRecurrente: (r?.ingreso_extraordinario ?? 0) - gastoExtraordinario,
       };
@@ -153,7 +167,7 @@ export default function AnalisisPage() {
 
     return Array.from(mapa.entries())
       .map(([categoria, v]) => {
-        const promedio = v.total / rangoMeses;
+        const promedio = v.total / cantidadMesesVentana;
         const variacion = v.anteriores3 > 0 ? (v.ultimos3 - v.anteriores3) / v.anteriores3 : v.ultimos3 > 0 ? 1 : 0;
         const serie = periodosVentana.map((p) => v.porMes.get(p) ?? 0);
         return { categoria, grupo: v.grupo, tipo: v.tipo, promedio, ultimos3: v.ultimos3, anteriores3: v.anteriores3, variacion, serie };
@@ -162,7 +176,7 @@ export default function AnalisisPage() {
       .filter((c) => (filtroGrupo === "TODOS" ? true : c.grupo === filtroGrupo))
       .filter((c) => (soloAlerta ? c.variacion > UMBRAL_ALERTA : true))
       .sort((a, b) => b.promedio - a.promedio);
-  }, [movs, rangoMeses, periodosVentana, filtroTipo, filtroGrupo, soloAlerta]);
+  }, [movs, cantidadMesesVentana, periodosVentana, filtroTipo, filtroGrupo, soloAlerta]);
 
   const cajaDeptos = useMemo(() => {
     const suma = (nombre: string) => movsDeptos.filter((m) => m.categoria === nombre).reduce((a, m) => a + m.monto, 0);
@@ -180,19 +194,26 @@ export default function AnalisisPage() {
     const categoriasSobreTope = presupuestoMesActual.filter((p) => p.gastado > p.tope || (p.tope <= 0 && p.gastado > 0));
 
     return [
-      { nombre: "Tasa de ahorro recurrente sobre 20%", ok: tasaAhorro >= 0.2, detalle: `${Math.round(tasaAhorro * 100)}%` },
-      { nombre: "Fijos + deudas bajo 50% del ingreso", ok: fijosDeudas <= 0.5, detalle: `${Math.round(fijosDeudas * 100)}%` },
-      { nombre: "Resultado del mes positivo", ok: resultado >= 0, detalle: formatoPesos(resultado) },
+      { nombre: "Tasa de ahorro recurrente sobre 20%", ok: tasaAhorro >= 0.2, detalle: `${Math.round(tasaAhorro * 100)}%`, lista: null as string[] | null },
+      { nombre: "Fijos + deudas bajo 50% del ingreso", ok: fijosDeudas <= 0.5, detalle: `${Math.round(fijosDeudas * 100)}%`, lista: null },
+      { nombre: "Resultado del mes positivo", ok: resultado >= 0, detalle: formatoPesos(resultado), lista: null },
       {
         nombre: "Todas las categorias dentro de su tope",
         ok: categoriasSobreTope.length === 0,
-        detalle:
-          presupuestoMesActual.length === 0
-            ? "sin presupuesto"
-            : `${categoriasSobreTope.length} sobre tope`,
+        detalle: presupuestoMesActual.length === 0 ? "sin presupuesto" : `${categoriasSobreTope.length} sobre tope`,
+        lista: categoriasSobreTope.length > 0 ? categoriasSobreTope.map((c) => c.categoria) : null,
       },
     ];
   }, [resumenMesActual, gastoRecurrenteMesActual, presupuestoMesActual]);
+
+  function alternarMes(periodo: string) {
+    setMesesSeleccionados((prev) => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(periodo)) nuevo.delete(periodo);
+      else nuevo.add(periodo);
+      return nuevo;
+    });
+  }
 
   if (cargando) {
     return <div className="flex min-h-[60dvh] items-center justify-center text-slate-400">Cargando...</div>;
@@ -200,33 +221,105 @@ export default function AnalisisPage() {
 
   return (
     <div className="mx-auto max-w-md space-y-6 p-4">
-      <div className="flex gap-2">
-        {RANGOS.map((r) => (
+      <div>
+        <div className="flex gap-2">
+          {RANGOS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => {
+                setModoRango("RAPIDO");
+                setRangoMeses(r);
+              }}
+              className={`flex-1 rounded-full py-1.5 text-xs font-medium ${
+                modoRango === "RAPIDO" && rangoMeses === r
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+              }`}
+            >
+              {r} meses
+            </button>
+          ))}
           <button
-            key={r}
             type="button"
-            onClick={() => setRangoMeses(r)}
+            onClick={() => setModoRango("PERSONALIZADO")}
             className={`flex-1 rounded-full py-1.5 text-xs font-medium ${
-              rangoMeses === r ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+              modoRango === "PERSONALIZADO" ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
             }`}
           >
-            {r} meses
+            Elegir meses
           </button>
-        ))}
+        </div>
+
+        {modoRango === "PERSONALIZADO" && (
+          <div className="mt-2 rounded-xl bg-white p-3 ring-1 ring-slate-200">
+            <div className="mb-2 flex items-center justify-between">
+              <button type="button" onClick={() => setAnioPersonalizado((a) => a - 1)} className="px-2 text-slate-500">
+                ‹
+              </button>
+              <span className="text-sm font-medium text-slate-700">{anioPersonalizado}</span>
+              <button type="button" onClick={() => setAnioPersonalizado((a) => a + 1)} className="px-2 text-slate-500">
+                ›
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {NOMBRES_MES_CORTO.map((nombreMes, i) => {
+                const periodo = `${anioPersonalizado}-${String(i + 1).padStart(2, "0")}`;
+                const seleccionado = mesesSeleccionados.has(periodo);
+                return (
+                  <button
+                    key={periodo}
+                    type="button"
+                    onClick={() => alternarMes(periodo)}
+                    className={`rounded-lg py-1.5 text-xs font-medium ${
+                      seleccionado ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {nombreMes}
+                  </button>
+                );
+              })}
+            </div>
+            {mesesSeleccionados.size === 0 && (
+              <p className="mt-2 text-xs text-slate-400">Elige uno o mas meses para filtrar.</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div>
         <h2 className="mb-2 text-sm font-medium text-slate-500">Chequeos de salud (mes actual)</h2>
         <div className="space-y-1.5 rounded-2xl bg-white p-3 ring-1 ring-slate-200">
-          {chequeos.map((c) => (
-            <div key={c.nombre} className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${c.ok ? "bg-emerald-500" : "bg-red-500"}`} />
-                <span className="text-slate-700">{c.nombre}</span>
+          {chequeos.map((c) => {
+            const puedeAbrir = !!c.lista && c.lista.length > 0;
+            const abierto = chequeoAbierto === c.nombre;
+            return (
+              <div key={c.nombre}>
+                <button
+                  type="button"
+                  disabled={!puedeAbrir}
+                  onClick={() => setChequeoAbierto(abierto ? null : c.nombre)}
+                  className="flex w-full items-center justify-between text-left text-sm disabled:cursor-default"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${c.ok ? "bg-emerald-500" : "bg-red-500"}`} />
+                    <span className="text-slate-700">{c.nombre}</span>
+                  </div>
+                  <span className={c.ok ? "text-emerald-600" : "text-red-600"}>
+                    {c.detalle}
+                    {puedeAbrir ? (abierto ? " ▲" : " ▼") : ""}
+                  </span>
+                </button>
+                {abierto && c.lista && (
+                  <ul className="mt-1 space-y-0.5 pl-4 text-xs text-slate-500">
+                    {c.lista.map((nombre) => (
+                      <li key={nombre}>• {nombre}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
-              <span className={c.ok ? "text-emerald-600" : "text-red-600"}>{c.detalle}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

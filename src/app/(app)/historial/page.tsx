@@ -4,7 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { formatoPesos, periodoActual } from "@/lib/formato";
 import { SelectorPeriodo } from "@/components/SelectorPeriodo";
-import type { Categoria, Cuenta, EstadoMov, Persona, VMovimiento } from "@/types/database";
+import type { Categoria, Cuenta, EstadoMov, Persona, TipoFlujo, VMovimiento } from "@/types/database";
+
+const TIPOS: { valor: TipoFlujo; etiqueta: string }[] = [
+  { valor: "GASTO", etiqueta: "Gasto" },
+  { valor: "INGRESO", etiqueta: "Ingreso" },
+  { valor: "TRANSFERENCIA", etiqueta: "Transferencia" },
+];
 
 function etiquetaCuenta(c: Cuenta) {
   if (c.tipo === "TARJETA_CREDITO") return `${c.banco ?? c.nombre} •${c.ultimos4 ?? ""}`;
@@ -14,9 +20,9 @@ function etiquetaCuenta(c: Cuenta) {
 export default function HistorialPage() {
   const [todosLosMeses, setTodosLosMeses] = useState(false);
   const [periodo, setPeriodo] = useState(periodoActual());
+  const [tipoFlujo, setTipoFlujo] = useState<TipoFlujo | "">("");
   const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [personaId, setPersonaId] = useState<number | "">("");
-  const [cuentaId, setCuentaId] = useState<number | "">("");
   const [estado, setEstado] = useState<EstadoMov | "">("");
 
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -51,14 +57,14 @@ export default function HistorialPage() {
     setCargando(true);
     let query = supabase.from("v_movimientos").select("*").order("fecha_compra", { ascending: false });
     if (!todosLosMeses) query = query.eq("periodo_devengado", periodo);
+    if (tipoFlujo !== "") query = query.eq("tipo_flujo", tipoFlujo);
     if (categoriaId !== "") query = query.eq("categoria_id", categoriaId);
     if (personaId !== "") query = query.eq("persona_id", personaId);
-    if (cuentaId !== "") query = query.eq("cuenta_id", cuentaId);
     if (estado !== "") query = query.eq("estado", estado);
     const { data } = await query.limit(200);
     setMovimientos(data ?? []);
     setCargando(false);
-  }, [todosLosMeses, periodo, categoriaId, personaId, cuentaId, estado]);
+  }, [todosLosMeses, periodo, tipoFlujo, categoriaId, personaId, estado]);
 
   useEffect(() => {
     cargarMovimientos();
@@ -88,6 +94,36 @@ export default function HistorialPage() {
         </button>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setTipoFlujo("");
+            setCategoriaId("");
+          }}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${
+            tipoFlujo === "" ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+          }`}
+        >
+          Todos
+        </button>
+        {TIPOS.map((t) => (
+          <button
+            key={t.valor}
+            type="button"
+            onClick={() => {
+              setTipoFlujo(t.valor);
+              setCategoriaId("");
+            }}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              tipoFlujo === t.valor ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-inset ring-slate-300"
+            }`}
+          >
+            {t.etiqueta}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         <select
           value={categoriaId}
@@ -95,11 +131,13 @@ export default function HistorialPage() {
           className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
         >
           <option value="">Todas las categorias</option>
-          {categorias.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}
-            </option>
-          ))}
+          {categorias
+            .filter((c) => (tipoFlujo === "" ? true : c.tipo === tipoFlujo))
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nombre}
+              </option>
+            ))}
         </select>
         <select
           value={personaId}
@@ -114,21 +152,9 @@ export default function HistorialPage() {
           ))}
         </select>
         <select
-          value={cuentaId}
-          onChange={(e) => setCuentaId(e.target.value ? Number(e.target.value) : "")}
-          className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
-        >
-          <option value="">Todo medio de pago</option>
-          {cuentas.map((c) => (
-            <option key={c.id} value={c.id}>
-              {etiquetaCuenta(c)}
-            </option>
-          ))}
-        </select>
-        <select
           value={estado}
           onChange={(e) => setEstado(e.target.value as EstadoMov | "")}
-          className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+          className="col-span-2 rounded-lg border border-slate-300 px-2 py-2 text-sm"
         >
           <option value="">Todo estado</option>
           <option value="PAGADO">Pagado</option>

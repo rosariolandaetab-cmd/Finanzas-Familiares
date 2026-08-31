@@ -19,6 +19,7 @@ export default function PresupuestoPage() {
   const [gastoNoPresupuestable, setGastoNoPresupuestable] = useState(0);
   const [ediciones, setEdiciones] = useState<Record<number, FilaEdicion>>({});
   const [copiando, setCopiando] = useState(false);
+  const [mensajeError, setMensajeError] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -94,9 +95,14 @@ export default function PresupuestoPage() {
       if (numero <= 0) return;
       valor = fila.tipo === "FIJO" ? Math.round(numero) : numero / 100;
     }
-    await supabase
+    const { error } = await supabase
       .from("presupuestos")
       .upsert({ periodo, categoria_id: categoriaId, tipo: fila.tipo, valor }, { onConflict: "periodo,categoria_id" });
+    if (error) {
+      setMensajeError(`No se pudo guardar: ${error.message}`);
+      setTimeout(() => setMensajeError(null), 4000);
+      return;
+    }
     cargar();
   }
 
@@ -126,27 +132,28 @@ export default function PresupuestoPage() {
       <SelectorPeriodo periodo={periodo} onChange={setPeriodo} />
 
       <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500">Disponible para repartir en topes</span>
-          <span className="font-medium text-slate-700">{formatoPesos(disponibleParaPresupuestar)}</span>
-        </div>
-        <p className="mt-0.5 text-xs text-slate-400">
-          Ingreso recurrente ({formatoPesos(ingresoRecurrente)}) menos lo gastado en categorias fijas/deudas
-          ({formatoPesos(gastoNoPresupuestable)})
+        <Linea etiqueta="1. Ingreso recurrente del mes" valor={formatoPesos(ingresoRecurrente)} />
+        <p className="mb-2 text-[11px] text-slate-400">Lo que entra de sueldo cada mes.</p>
+
+        <Linea etiqueta="2. Disponible" valor={formatoPesos(disponibleParaPresupuestar)} />
+        <p className="mb-2 text-[11px] text-slate-400">
+          Ingreso menos lo ya gastado en fijos y deudas ({formatoPesos(gastoNoPresupuestable)}) — categorias que no
+          se presupuestan aqui, pero igual descuentan apenas las registras en Registrar.
         </p>
-        <div className="mt-3 border-t border-slate-100 pt-3">
-          <p className="text-xs text-slate-500">Ahorro proyectado del mes (sin asignar todavia)</p>
-          <p className={`mt-1 text-2xl font-semibold ${ahorroProyectado < 0 ? "text-red-600" : "text-slate-900"}`}>
-            {formatoPesos(ahorroProyectado)}
+
+        <div className="border-t border-slate-100 pt-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-700">3. Por asignar</span>
+            <span className={`text-xl font-semibold ${ahorroProyectado < 0 ? "text-red-600" : "text-slate-900"}`}>
+              {formatoPesos(ahorroProyectado)}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Disponible menos los topes que le pones a cada categoria abajo (bajan solas apenas asignas $, % o
+            &quot;= gasto real&quot;). Si llega a $0, ya repartiste todo.
           </p>
-          <p className="mt-1 text-xs text-slate-400">= disponible menos la suma de los topes que ya asignaste abajo</p>
         </div>
       </div>
-
-      <p className="text-xs text-slate-400">
-        Tip: si una categoria no te interesa fijarle un tope, usa la opcion &quot;= gasto real&quot; para que no
-        quede sumando aqui como si fuera plata sin usar.
-      </p>
 
       <button
         type="button"
@@ -221,6 +228,21 @@ export default function PresupuestoPage() {
           );
         })}
       </div>
+
+      {mensajeError && (
+        <p className="fixed inset-x-0 bottom-20 mx-auto w-fit rounded-full bg-red-600 px-4 py-2 text-sm text-white shadow-lg">
+          {mensajeError}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Linea({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-slate-500">{etiqueta}</span>
+      <span className="font-medium text-slate-700">{valor}</span>
     </div>
   );
 }
