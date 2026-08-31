@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { etiquetaPeriodo, formatoPesos, periodoActual, sumarMesesAPeriodo } from "@/lib/formato";
 import { AhorroChart } from "@/components/AhorroChart";
 import { Sparkline } from "@/components/Sparkline";
-import type { Categoria, Recurrencia, TipoFlujo, VDeudaTarjeta, VMovimiento, VResumenMensual } from "@/types/database";
+import type { Categoria, Recurrencia, TipoFlujo, VMovimiento, VPresupuestoMes, VResumenMensual } from "@/types/database";
 
 const RANGOS = [3, 6, 12] as const;
 const UMBRAL_ALERTA = 0.15;
@@ -37,7 +37,7 @@ export default function AnalisisPage() {
   const [movsDeptos, setMovsDeptos] = useState<Pick<VMovimiento, "categoria" | "monto">[]>([]);
   const [resumenMesActual, setResumenMesActual] = useState<VResumenMensual | null>(null);
   const [gastoRecurrenteMesActual, setGastoRecurrenteMesActual] = useState(0);
-  const [deudaTarjeta, setDeudaTarjeta] = useState<VDeudaTarjeta[]>([]);
+  const [presupuestoMesActual, setPresupuestoMesActual] = useState<VPresupuestoMes[]>([]);
 
   useEffect(() => {
     let cancelado = false;
@@ -54,7 +54,7 @@ export default function AnalisisPage() {
         { data: deptosData },
         { data: resumenActualData },
         { data: movsRecurrentesActual },
-        { data: deudaData },
+        { data: presupuestoData },
       ] = await Promise.all([
         supabase.from("categorias").select("*").eq("activa", true),
         supabase.from("v_resumen_mensual").select("*").in("periodo", periodos),
@@ -74,7 +74,7 @@ export default function AnalisisPage() {
           .eq("periodo_devengado", mesActual)
           .eq("tipo_flujo", "GASTO")
           .eq("recurrencia", "RECURRENTE"),
-        supabase.from("v_deuda_tarjeta").select("*"),
+        supabase.from("v_presupuesto_mes").select("*").eq("periodo", mesActual),
       ]);
       if (cancelado) return;
       setCategorias(catsData ?? []);
@@ -83,7 +83,7 @@ export default function AnalisisPage() {
       setMovsDeptos(deptosData ?? []);
       setResumenMesActual(resumenActualData ?? null);
       setGastoRecurrenteMesActual((movsRecurrentesActual ?? []).reduce((a, m) => a + m.monto, 0));
-      setDeudaTarjeta(deudaData ?? []);
+      setPresupuestoMesActual(presupuestoData ?? []);
       setCargando(false);
     }
     cargar();
@@ -177,16 +177,22 @@ export default function AnalisisPage() {
     const tasaAhorro = r && r.ingreso_recurrente > 0 ? (r.ingreso_recurrente - gastoRecurrenteMesActual) / r.ingreso_recurrente : 0;
     const fijosDeudas = r && r.ingreso_recurrente > 0 ? (r.fijos + r.deudas) / r.ingreso_recurrente : 0;
     const resultado = r ? r.ingreso_recurrente + r.ingreso_extraordinario - r.gasto_total : 0;
-    const deudaTotal = deudaTarjeta.reduce((a, d) => a + d.total_pendiente, 0);
-    const deudaSobreIngreso = r && r.ingreso_recurrente > 0 ? deudaTotal / r.ingreso_recurrente : 0;
+    const categoriasSobreTope = presupuestoMesActual.filter((p) => p.gastado > p.tope || (p.tope <= 0 && p.gastado > 0));
 
     return [
       { nombre: "Tasa de ahorro recurrente sobre 20%", ok: tasaAhorro >= 0.2, detalle: `${Math.round(tasaAhorro * 100)}%` },
       { nombre: "Fijos + deudas bajo 50% del ingreso", ok: fijosDeudas <= 0.5, detalle: `${Math.round(fijosDeudas * 100)}%` },
       { nombre: "Resultado del mes positivo", ok: resultado >= 0, detalle: formatoPesos(resultado) },
-      { nombre: "Deuda de tarjeta bajo 30% del ingreso recurrente", ok: deudaSobreIngreso <= 0.3, detalle: `${Math.round(deudaSobreIngreso * 100)}%` },
+      {
+        nombre: "Todas las categorias dentro de su tope",
+        ok: categoriasSobreTope.length === 0,
+        detalle:
+          presupuestoMesActual.length === 0
+            ? "sin presupuesto"
+            : `${categoriasSobreTope.length} sobre tope`,
+      },
     ];
-  }, [resumenMesActual, gastoRecurrenteMesActual, deudaTarjeta]);
+  }, [resumenMesActual, gastoRecurrenteMesActual, presupuestoMesActual]);
 
   if (cargando) {
     return <div className="flex min-h-[60dvh] items-center justify-center text-slate-400">Cargando...</div>;
