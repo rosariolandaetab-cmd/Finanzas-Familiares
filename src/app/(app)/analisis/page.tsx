@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { etiquetaPeriodo, formatoPesos, periodoActual, sumarMesesAPeriodo } from "@/lib/formato";
 import { AhorroChart } from "@/components/AhorroChart";
 import { Sparkline } from "@/components/Sparkline";
+import { obtenerSaldos } from "@/lib/inversion";
 import type { Categoria, Recurrencia, TipoFlujo, VMovimiento, VPresupuestoMes, VResumenMensual } from "@/types/database";
 
 const RANGOS = [3, 6, 12] as const;
@@ -45,6 +46,7 @@ export default function AnalisisPage() {
   const [resumenMesActual, setResumenMesActual] = useState<VResumenMensual | null>(null);
   const [gastoRecurrenteMesActual, setGastoRecurrenteMesActual] = useState(0);
   const [presupuestoMesActual, setPresupuestoMesActual] = useState<VPresupuestoMes[]>([]);
+  const [saldoFondoEmergencia, setSaldoFondoEmergencia] = useState(0);
 
   const periodosVentana = useMemo(() => {
     if (modoRango === "PERSONALIZADO") return Array.from(mesesSeleccionados).sort();
@@ -67,6 +69,7 @@ export default function AnalisisPage() {
         { data: resumenActualData },
         { data: movsRecurrentesActual },
         { data: presupuestoData },
+        saldosInversion,
       ] = await Promise.all([
         supabase.from("categorias").select("*").eq("activa", true),
         supabase.from("v_resumen_mensual").select("*").in("periodo", periodos),
@@ -89,6 +92,7 @@ export default function AnalisisPage() {
           .eq("tipo_flujo", "GASTO")
           .eq("recurrencia", "RECURRENTE"),
         supabase.from("v_presupuesto_mes").select("*").eq("periodo", mesActual),
+        obtenerSaldos(),
       ]);
       if (cancelado) return;
       setCategorias(catsData ?? []);
@@ -98,6 +102,9 @@ export default function AnalisisPage() {
       setResumenMesActual(resumenActualData ?? null);
       setGastoRecurrenteMesActual((movsRecurrentesActual ?? []).reduce((a, m) => a + m.monto, 0));
       setPresupuestoMesActual(presupuestoData ?? []);
+      setSaldoFondoEmergencia(
+        saldosInversion.filter((s) => s.nombre === "Rocha" || s.nombre === "Lalo").reduce((a, s) => a + Math.max(0, s.saldo_actual), 0)
+      );
       setCargando(false);
     }
     cargar();
@@ -188,10 +195,23 @@ export default function AnalisisPage() {
 
   const chequeos = useMemo(() => {
     const r = resumenMesActual;
+    const mesActual = periodoActual();
     const tasaAhorro = r && r.ingreso_recurrente > 0 ? (r.ingreso_recurrente - gastoRecurrenteMesActual) / r.ingreso_recurrente : 0;
     const fijosDeudas = r && r.ingreso_recurrente > 0 ? (r.fijos + r.deudas) / r.ingreso_recurrente : 0;
     const resultado = r ? r.ingreso_recurrente + r.ingreso_extraordinario - r.gasto_total : 0;
     const categoriasSobreTope = presupuestoMesActual.filter((p) => p.gastado > p.tope || (p.tope <= 0 && p.gastado > 0));
+
+    const gastoFijoMensual = r ? r.fijos + r.deudas : 0;
+    const mesesCubiertos = gastoFijoMensual > 0 ? saldoFondoEmergencia / gastoFijoMensual : 0;
+
+    const gastoVariablePorMes = (periodo: string) =>
+      movs
+        .filter((m) => m.tipo_flujo === "GASTO" && m.grupo === "Variables" && m.periodo_devengado === periodo)
+        .reduce((a, m) => a + m.monto, 0);
+    const p6 = ultimosPeriodos(6);
+    const gastoVariableMesActual = gastoVariablePorMes(mesActual);
+    const promedioVariable6 = p6.reduce((a, p) => a + gastoVariablePorMes(p), 0) / 6;
+    const gastoDisparado = promedioVariable6 > 0 && gastoVariableMesActual > promedioVariable6 * 1.2;
 
     return [
       { nombre: "Tasa de ahorro recurrente sobre 20%", ok: tasaAhorro >= 0.2, detalle: `${Math.round(tasaAhorro * 100)}%`, lista: null as string[] | null },
@@ -203,8 +223,20 @@ export default function AnalisisPage() {
         detalle: presupuestoMesActual.length === 0 ? "sin presupuesto" : `${categoriasSobreTope.length} sobre tope`,
         lista: categoriasSobreTope.length > 0 ? categoriasSobreTope.map((c) => c.categoria) : null,
       },
+      {
+        nombre: "Fondo de emergencia sobre 3 meses",
+        ok: mesesCubiertos >= 3,
+        detalle: `${mesesCubiertos.toFixed(1)} meses`,
+        lista: null,
+      },
+      {
+        nombre: "Gasto variable no se disparo",
+        ok: !gastoDisparado,
+        detalle: promedioVariable6 > 0 ? `${Math.round((gastoVariableMesActual / promedioVariable6) * 100)}% del promedio` : "sin historial",
+        lista: null,
+      },
     ];
-  }, [resumenMesActual, gastoRecurrenteMesActual, presupuestoMesActual]);
+  }, [resumenMesActual, gastoRecurrenteMesActual, presupuestoMesActual, saldoFondoEmergencia, movs]);
 
   function alternarMes(periodo: string) {
     setMesesSeleccionados((prev) => {
