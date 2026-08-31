@@ -105,30 +105,46 @@ export async function repartirAporteInversion({
   await supabase.from("inversion_movimientos").insert(filas);
 }
 
-// Reparte una ganancia entre los 3 participantes activos, segun cuanto tiene
-// cada uno hoy. Tambien crea el movimiento correspondiente (categoria
-// "Ganancia inversion", tipo Transferencia: no cuenta como ingreso de la
-// familia, igual que Aporte y Retiro de inversion).
+// Reparte una ganancia. Por defecto entre los participantes activos, segun
+// cuanto tiene cada uno hoy. Si se pasa participantesIds, reparte solo entre
+// esos (por ejemplo Rocha y Lalo, o uno solo que se lleva el 100%). Tambien
+// crea el movimiento correspondiente (categoria "Ganancia inversion", tipo
+// Transferencia: no cuenta como ingreso de la familia, igual que Aporte y
+// Retiro de inversion).
 export async function registrarGanancia({
   monto,
   fecha,
   comentario,
   creadoPor,
+  participantesIds,
 }: {
   monto: number;
   fecha: string;
   comentario: string | null;
   creadoPor: number | null;
+  participantesIds?: number[];
 }): Promise<{ error: string | null }> {
-  const [saldos, categoriaId, cuentaId] = await Promise.all([
+  const [saldosTodos, categoriaId, cuentaId] = await Promise.all([
     obtenerSaldos(),
     idCategoria(CODIGO_GANANCIA_INVERSION),
     idCuentaPorTipo("INVERSION"),
   ]);
   if (!categoriaId || !cuentaId) return { error: "Falta configuracion en Supabase (categoria o cuenta de inversion)." };
 
-  const totalSaldo = saldos.reduce((a, s) => a + Math.max(0, s.saldo_actual), 0);
-  if (totalSaldo <= 0) return { error: "No hay saldo registrado todavia. Carga primero el saldo inicial de cada uno." };
+  const saldos =
+    participantesIds && participantesIds.length > 0
+      ? saldosTodos.filter((s) => participantesIds.includes(s.id))
+      : saldosTodos;
+  if (saldos.length === 0) return { error: "No encontre a los participantes elegidos." };
+
+  let pesos: { id: number; pct: number }[];
+  if (saldos.length === 1) {
+    pesos = [{ id: saldos[0].id, pct: 1 }];
+  } else {
+    const totalSaldo = saldos.reduce((a, s) => a + Math.max(0, s.saldo_actual), 0);
+    if (totalSaldo <= 0) return { error: "No hay saldo positivo entre los participantes elegidos." };
+    pesos = saldos.map((s) => ({ id: s.id, pct: Math.max(0, s.saldo_actual) / totalSaldo }));
+  }
 
   const { data: movimiento, error: errorMov } = await supabase
     .from("movimientos")
@@ -149,19 +165,16 @@ export async function registrarGanancia({
 
   await supabase.from("movimientos").update({ recurrencia: "TRANSFERENCIA" }).eq("id", movimiento.id);
 
-  const filas: MovimientoInversionInsert[] = saldos.map((s) => {
-    const pct = Math.max(0, s.saldo_actual) / totalSaldo;
-    return {
-      fecha,
-      tipo: "GANANCIA" as TipoMovInversion,
-      participante_id: s.id,
-      monto: Math.round(monto * pct),
-      porcentaje_aplicado: pct,
-      movimiento_id: movimiento.id,
-      comentario,
-      creado_por: creadoPor,
-    };
-  });
+  const filas: MovimientoInversionInsert[] = pesos.map((p) => ({
+    fecha,
+    tipo: "GANANCIA" as TipoMovInversion,
+    participante_id: p.id,
+    monto: Math.round(monto * p.pct),
+    porcentaje_aplicado: p.pct,
+    movimiento_id: movimiento.id,
+    comentario,
+    creado_por: creadoPor,
+  }));
 
   await supabase.from("inversion_movimientos").insert(filas);
   return { error: null };

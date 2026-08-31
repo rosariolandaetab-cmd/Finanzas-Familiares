@@ -5,10 +5,17 @@ import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase/client";
 import { formatoPesos, hoyISO } from "@/lib/formato";
 import { actualizarSaldoInicial, obtenerSaldos, registrarGanancia, registrarRetiro } from "@/lib/inversion";
-import { EvolucionSaldoChart } from "@/components/EvolucionSaldoChart";
+import { EvolucionParticipantesChart, type PuntoParticipantes } from "@/components/EvolucionParticipantesChart";
 import type { MovimientoInversion, ParticipanteInversion, VInversionSaldo } from "@/types/database";
 
 type Accion = "GANANCIA" | "RETIRO" | null;
+type ModoReparto = "TODOS" | "ROCHA_LALO" | "UNO";
+
+const COLORES_PARTICIPANTE: Record<string, string> = {
+  Rocha: "#2563eb",
+  Lalo: "#ea580c",
+  "Bajo Lalo": "#64748b",
+};
 
 export default function InversionPage() {
   const { persona } = useAuth();
@@ -21,6 +28,8 @@ export default function InversionPage() {
   const [monto, setMonto] = useState("");
   const [fecha, setFecha] = useState(hoyISO());
   const [comentario, setComentario] = useState("");
+  const [modoReparto, setModoReparto] = useState<ModoReparto>("TODOS");
+  const [participanteUnico, setParticipanteUnico] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
@@ -47,36 +56,68 @@ export default function InversionPage() {
   const totalFondo = saldos.reduce((a, s) => a + Math.max(0, s.saldo_actual), 0);
   const gananciaAcumulada = historial.filter((h) => h.tipo === "GANANCIA").reduce((a, h) => a + h.monto, 0);
 
-  const evolucionSaldo = useMemo(() => {
-    const saldoInicialTotal = participantes.reduce((a, p) => a + p.saldo_inicial, 0);
+  const evolucionParticipantes = useMemo(() => {
+    const nombres = participantes.map((p) => p.nombre);
+    const idANombre = new Map(participantes.map((p) => [p.id, p.nombre]));
+    const corridas = new Map<string, number>(participantes.map((p) => [p.nombre, p.saldo_inicial]));
+
     const ordenAsc = [...historial].sort((a, b) => a.fecha.localeCompare(b.fecha));
-    const porFecha = new Map<string, number>();
-    for (const h of ordenAsc) {
-      porFecha.set(h.fecha, (porFecha.get(h.fecha) ?? 0) + h.monto);
-    }
-    let corrida = saldoInicialTotal;
-    const puntos = [{ etiqueta: "Inicio", saldo: corrida }];
-    for (const [fecha, delta] of Array.from(porFecha.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-      corrida += delta;
-      puntos.push({ etiqueta: new Date(fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" }), saldo: corrida });
+    const fechasUnicas = Array.from(new Set(ordenAsc.map((h) => h.fecha))).sort();
+
+    const puntoInicio: PuntoParticipantes = { etiqueta: "Inicio" };
+    for (const n of nombres) puntoInicio[n] = corridas.get(n) ?? 0;
+    const puntos: PuntoParticipantes[] = [puntoInicio];
+
+    for (const fecha of fechasUnicas) {
+      for (const h of ordenAsc.filter((x) => x.fecha === fecha)) {
+        const nombre = idANombre.get(h.participante_id);
+        if (!nombre) continue;
+        corridas.set(nombre, (corridas.get(nombre) ?? 0) + h.monto);
+      }
+      const punto: PuntoParticipantes = {
+        etiqueta: new Date(fecha + "T00:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" }),
+      };
+      for (const n of nombres) punto[n] = corridas.get(n) ?? 0;
+      puntos.push(punto);
     }
     return puntos;
   }, [historial, participantes]);
+
+  const seriesParticipantes = participantes.map((p) => ({
+    nombre: p.nombre,
+    color: COLORES_PARTICIPANTE[p.nombre] ?? "#64748b",
+  }));
 
   function limpiarForm() {
     setAccion(null);
     setMonto("");
     setFecha(hoyISO());
     setComentario("");
+    setModoReparto("TODOS");
+    setParticipanteUnico(null);
   }
 
   async function confirmar() {
     const montoNumero = Number(monto || "0");
     if (montoNumero <= 0 || !accion) return;
+    if (accion === "GANANCIA" && modoReparto === "UNO" && !participanteUnico) return;
     setGuardando(true);
 
-    const payload = { monto: montoNumero, fecha, comentario: comentario.trim() || null, creadoPor: persona?.id ?? null };
-    const { error } = accion === "GANANCIA" ? await registrarGanancia(payload) : await registrarRetiro(payload);
+    const base = { monto: montoNumero, fecha, comentario: comentario.trim() || null, creadoPor: persona?.id ?? null };
+
+    let error: string | null;
+    if (accion === "GANANCIA") {
+      const rochaLaloIds = participantes.filter((p) => p.nombre === "Rocha" || p.nombre === "Lalo").map((p) => p.id);
+      const participantesIds =
+        modoReparto === "UNO" && participanteUnico
+          ? [participanteUnico]
+          : modoReparto === "ROCHA_LALO"
+          ? rochaLaloIds
+          : undefined;
+      ({ error } = await registrarGanancia({ ...base, participantesIds }));
+    } else {
+      ({ error } = await registrarRetiro(base));
+    }
 
     setGuardando(false);
     if (error) {
@@ -160,7 +201,7 @@ export default function InversionPage() {
           <span className="text-xs text-slate-400">Ganancia acumulada: {formatoPesos(gananciaAcumulada)}</span>
         </div>
         <div className="rounded-2xl bg-white p-2 ring-1 ring-slate-200">
-          <EvolucionSaldoChart datos={evolucionSaldo} />
+          <EvolucionParticipantesChart datos={evolucionParticipantes} series={seriesParticipantes} />
         </div>
       </div>
 
@@ -168,14 +209,14 @@ export default function InversionPage() {
         <button
           type="button"
           onClick={() => setAccion("GANANCIA")}
-          className="rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white"
+          className="min-h-11 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white"
         >
           Registrar ganancia
         </button>
         <button
           type="button"
           onClick={() => setAccion("RETIRO")}
-          className="rounded-xl bg-orange-600 py-3 text-sm font-semibold text-white"
+          className="min-h-11 rounded-xl bg-orange-600 py-3 text-sm font-semibold text-white"
         >
           Retirar
         </button>
@@ -183,9 +224,49 @@ export default function InversionPage() {
 
       {accion && (
         <div className="space-y-2 rounded-xl bg-white p-3 ring-2 ring-blue-500">
-          <p className="text-sm font-medium text-slate-700">
-            {accion === "GANANCIA" ? "Ganancia a repartir entre los 3" : "Retiro entre Rocha y Lalo"}
-          </p>
+          {accion === "GANANCIA" ? (
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-slate-700">Repartir entre</p>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { valor: "TODOS", etiqueta: "Los 3" },
+                    { valor: "ROCHA_LALO", etiqueta: "Solo Rocha y Lalo" },
+                    { valor: "UNO", etiqueta: "Solo uno" },
+                  ] as { valor: ModoReparto; etiqueta: string }[]
+                ).map((op) => (
+                  <button
+                    key={op.valor}
+                    type="button"
+                    onClick={() => setModoReparto(op.valor)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                      modoReparto === op.valor ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {op.etiqueta}
+                  </button>
+                ))}
+              </div>
+              {modoReparto === "UNO" && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {participantes.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setParticipanteUnico(p.id)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                        participanteUnico === p.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {p.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm font-medium text-slate-700">Retiro entre Rocha y Lalo</p>
+          )}
           <input
             type="text"
             inputMode="numeric"
@@ -212,7 +293,7 @@ export default function InversionPage() {
             <button
               type="button"
               onClick={confirmar}
-              disabled={guardando || !monto}
+              disabled={guardando || !monto || (accion === "GANANCIA" && modoReparto === "UNO" && !participanteUnico)}
               className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {guardando ? "Guardando..." : "Confirmar"}

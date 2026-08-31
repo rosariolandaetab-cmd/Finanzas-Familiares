@@ -2,7 +2,7 @@ export type TipoFlujo = "INGRESO" | "GASTO" | "TRANSFERENCIA";
 export type TipoCuenta = "CORRIENTE" | "TARJETA_CREDITO" | "EFECTIVO" | "INVERSION";
 export type EstadoMov = "PENDIENTE" | "PAGADO";
 export type Recurrencia = "RECURRENTE" | "EXTRAORDINARIO" | "TRANSFERENCIA";
-export type TipoTope = "FIJO" | "PORCENTAJE";
+export type TipoTope = "FIJO" | "PORCENTAJE" | "REAL";
 export type TipoMovInversion = "APORTE" | "GANANCIA" | "RETIRO";
 
 export type Categoria = {

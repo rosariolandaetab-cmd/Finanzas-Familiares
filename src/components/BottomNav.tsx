@@ -24,7 +24,7 @@ export function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex-1 py-2.5 text-center text-[11px] font-medium ${
+              className={`flex min-h-14 flex-1 flex-col items-center justify-center py-2 text-center text-xs font-medium ${
                 activo ? "text-blue-600" : "text-slate-400"
               }`}
             >

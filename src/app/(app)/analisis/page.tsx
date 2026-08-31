@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { etiquetaPeriodo, formatoPesos, periodoActual, sumarMesesAPeriodo } from "@/lib/formato";
-import { TasaAhorroChart } from "@/components/TasaAhorroChart";
+import { AhorroChart } from "@/components/AhorroChart";
 import { Sparkline } from "@/components/Sparkline";
-import type { Categoria, TipoFlujo, VDeudaTarjeta, VMovimiento, VResumenMensual } from "@/types/database";
+import type { Categoria, Recurrencia, TipoFlujo, VDeudaTarjeta, VMovimiento, VResumenMensual } from "@/types/database";
 
 const RANGOS = [3, 6, 12] as const;
 const UMBRAL_ALERTA = 0.15;
@@ -31,7 +31,9 @@ export default function AnalisisPage() {
 
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [resumenes, setResumenes] = useState<VResumenMensual[]>([]);
-  const [movs, setMovs] = useState<Pick<VMovimiento, "categoria" | "grupo" | "tipo_flujo" | "monto" | "periodo_devengado">[]>([]);
+  const [movs, setMovs] = useState<
+    Pick<VMovimiento, "categoria" | "grupo" | "tipo_flujo" | "monto" | "periodo_devengado" | "recurrencia">[]
+  >([]);
   const [movsDeptos, setMovsDeptos] = useState<Pick<VMovimiento, "categoria" | "monto">[]>([]);
   const [resumenMesActual, setResumenMesActual] = useState<VResumenMensual | null>(null);
   const [gastoRecurrenteMesActual, setGastoRecurrenteMesActual] = useState(0);
@@ -58,7 +60,7 @@ export default function AnalisisPage() {
         supabase.from("v_resumen_mensual").select("*").in("periodo", periodos),
         supabase
           .from("v_movimientos")
-          .select("categoria, grupo, tipo_flujo, monto, periodo_devengado")
+          .select("categoria, grupo, tipo_flujo, monto, periodo_devengado, recurrencia")
           .in("tipo_flujo", ["GASTO", "INGRESO"])
           .in("periodo_devengado", periodos),
         supabase
@@ -92,15 +94,23 @@ export default function AnalisisPage() {
 
   const periodosVentana = useMemo(() => ultimosPeriodos(rangoMeses), [rangoMeses]);
 
-  const evolucionAhorro = useMemo(
-    () =>
-      periodosVentana.map((p) => {
-        const r = resumenes.find((x) => x.periodo === p);
-        const tasa = r && r.ingreso_recurrente > 0 ? Math.max(0, r.ingreso_recurrente - r.gasto_total) / r.ingreso_recurrente : 0;
-        return { periodo: p, etiqueta: etiquetaPeriodo(p).split(" ")[0].slice(0, 3), tasa: Math.round(tasa * 100) };
-      }),
-    [periodosVentana, resumenes]
-  );
+  const evolucionAhorro = useMemo(() => {
+    const gastoPorPeriodoYRecurrencia = (periodo: string, recurrencia: Recurrencia) =>
+      movs
+        .filter((m) => m.tipo_flujo === "GASTO" && m.periodo_devengado === periodo && m.recurrencia === recurrencia)
+        .reduce((a, m) => a + m.monto, 0);
+
+    return periodosVentana.map((p) => {
+      const r = resumenes.find((x) => x.periodo === p);
+      const gastoRecurrente = gastoPorPeriodoYRecurrencia(p, "RECURRENTE");
+      const gastoExtraordinario = gastoPorPeriodoYRecurrencia(p, "EXTRAORDINARIO");
+      return {
+        etiqueta: etiquetaPeriodo(p).split(" ")[0].slice(0, 3),
+        ahorroRecurrente: (r?.ingreso_recurrente ?? 0) - gastoRecurrente,
+        ahorroNoRecurrente: (r?.ingreso_extraordinario ?? 0) - gastoExtraordinario,
+      };
+    });
+  }, [periodosVentana, resumenes, movs]);
 
   const gruposDisponibles = useMemo(() => {
     const tipos = filtroTipo === "TODOS" ? (["GASTO", "INGRESO"] as TipoFlujo[]) : [filtroTipo];
@@ -215,9 +225,9 @@ export default function AnalisisPage() {
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium text-slate-500">Tasa de ahorro recurrente</h2>
+        <h2 className="mb-2 text-sm font-medium text-slate-500">Ahorro recurrente vs no recurrente</h2>
         <div className="rounded-2xl bg-white p-2 ring-1 ring-slate-200">
-          <TasaAhorroChart datos={evolucionAhorro.map((e) => ({ etiqueta: e.etiqueta, tasa: e.tasa }))} />
+          <AhorroChart datos={evolucionAhorro} />
         </div>
       </div>
 

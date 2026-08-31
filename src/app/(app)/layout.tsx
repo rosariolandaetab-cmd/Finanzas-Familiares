@@ -53,7 +53,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           Salir
         </button>
       </div>
-      <div className="pb-16">{children}</div>
+      <div className="pb-20">{children}</div>
       <BottomNav />
     </AuthProvider>
   );

@@ -60,7 +60,12 @@ export default function PresupuestoPage() {
       if (actual) {
         nuevasEdiciones[c.id] = {
           tipo: actual.tipo,
-          valorTexto: actual.tipo === "FIJO" ? String(Math.round(actual.valor)) : String(actual.valor * 100),
+          valorTexto:
+            actual.tipo === "FIJO"
+              ? String(Math.round(actual.valor))
+              : actual.tipo === "PORCENTAJE"
+              ? String(actual.valor * 100)
+              : "",
         };
       }
     }
@@ -79,14 +84,16 @@ export default function PresupuestoPage() {
   }, [vista]);
 
   const sumaTopes = useMemo(() => vista.reduce((acc, v) => acc + v.tope, 0), [vista]);
-  const ahorroProyectado = ingresoRecurrente - sumaTopes - gastoNoPresupuestable;
   const disponibleParaPresupuestar = ingresoRecurrente - gastoNoPresupuestable;
-  const restanteSinAsignar = disponibleParaPresupuestar - sumaTopes;
+  const ahorroProyectado = disponibleParaPresupuestar - sumaTopes;
 
   async function guardarFila(categoriaId: number, fila: FilaEdicion) {
-    const numero = Number(fila.valorTexto || "0");
-    if (numero <= 0) return;
-    const valor = fila.tipo === "FIJO" ? Math.round(numero) : numero / 100;
+    let valor = 0;
+    if (fila.tipo !== "REAL") {
+      const numero = Number(fila.valorTexto || "0");
+      if (numero <= 0) return;
+      valor = fila.tipo === "FIJO" ? Math.round(numero) : numero / 100;
+    }
     await supabase
       .from("presupuestos")
       .upsert({ periodo, categoria_id: categoriaId, tipo: fila.tipo, valor }, { onConflict: "periodo,categoria_id" });
@@ -119,25 +126,27 @@ export default function PresupuestoPage() {
       <SelectorPeriodo periodo={periodo} onChange={setPeriodo} />
 
       <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <p className="text-xs text-slate-500">Ahorro proyectado del mes</p>
-        <p className={`mt-1 text-2xl font-semibold ${ahorroProyectado < 0 ? "text-red-600" : "text-slate-900"}`}>
-          {formatoPesos(ahorroProyectado)}
-        </p>
-        <p className="mt-1 text-xs text-slate-400">
-          Ingreso recurrente ({formatoPesos(ingresoRecurrente)}) menos fijos/deudas ({formatoPesos(gastoNoPresupuestable)})
-          menos la suma de topes
-        </p>
-        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-sm">
+        <div className="flex items-center justify-between text-sm">
           <span className="text-slate-500">Disponible para repartir en topes</span>
           <span className="font-medium text-slate-700">{formatoPesos(disponibleParaPresupuestar)}</span>
         </div>
-        <div className="mt-1 flex items-center justify-between text-sm">
-          <span className="text-slate-500">Sin asignar todavia</span>
-          <span className={`font-semibold ${restanteSinAsignar < 0 ? "text-red-600" : "text-emerald-600"}`}>
-            {formatoPesos(restanteSinAsignar)}
-          </span>
+        <p className="mt-0.5 text-xs text-slate-400">
+          Ingreso recurrente ({formatoPesos(ingresoRecurrente)}) menos lo gastado en categorias fijas/deudas
+          ({formatoPesos(gastoNoPresupuestable)})
+        </p>
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <p className="text-xs text-slate-500">Ahorro proyectado del mes (sin asignar todavia)</p>
+          <p className={`mt-1 text-2xl font-semibold ${ahorroProyectado < 0 ? "text-red-600" : "text-slate-900"}`}>
+            {formatoPesos(ahorroProyectado)}
+          </p>
+          <p className="mt-1 text-xs text-slate-400">= disponible menos la suma de los topes que ya asignaste abajo</p>
         </div>
       </div>
+
+      <p className="text-xs text-slate-400">
+        Tip: si una categoria no te interesa fijarle un tope, usa la opcion &quot;= gasto real&quot; para que no
+        quede sumando aqui como si fuera plata sin usar.
+      </p>
 
       <button
         type="button"
@@ -174,35 +183,39 @@ export default function PresupuestoPage() {
 
               <div className="mt-2 flex items-center gap-2">
                 <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs">
-                  {(["FIJO", "PORCENTAJE"] as TipoTope[]).map((t) => (
+                  {(["FIJO", "PORCENTAJE", "REAL"] as TipoTope[]).map((t) => (
                     <button
                       key={t}
                       type="button"
-                      onClick={() =>
-                        setEdiciones((prev) => ({ ...prev, [c.id]: { ...fila, tipo: t } }))
-                      }
+                      onClick={() => {
+                        const nuevaFila = { ...fila, tipo: t };
+                        setEdiciones((prev) => ({ ...prev, [c.id]: nuevaFila }));
+                        if (t === "REAL") guardarFila(c.id, nuevaFila);
+                      }}
                       className={`rounded-md px-2 py-1 ${
                         fila.tipo === t ? "bg-white font-medium text-slate-900 shadow-sm" : "text-slate-500"
                       }`}
                     >
-                      {t === "FIJO" ? "$" : "%"}
+                      {t === "FIJO" ? "$" : t === "PORCENTAJE" ? "%" : "= gasto real"}
                     </button>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder={fila.tipo === "FIJO" ? "Monto en pesos" : "% del ingreso"}
-                  value={fila.valorTexto}
-                  onChange={(e) =>
-                    setEdiciones((prev) => ({
-                      ...prev,
-                      [c.id]: { ...fila, valorTexto: e.target.value.replace(/[^0-9.]/g, "") },
-                    }))
-                  }
-                  onBlur={() => guardarFila(c.id, fila)}
-                  className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-                />
+                {fila.tipo !== "REAL" && (
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder={fila.tipo === "FIJO" ? "Monto en pesos" : "% del ingreso"}
+                    value={fila.valorTexto}
+                    onChange={(e) =>
+                      setEdiciones((prev) => ({
+                        ...prev,
+                        [c.id]: { ...fila, valorTexto: e.target.value.replace(/[^0-9.]/g, "") },
+                      }))
+                    }
+                    onBlur={() => guardarFila(c.id, fila)}
+                    className="flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                )}
               </div>
             </div>
           );
