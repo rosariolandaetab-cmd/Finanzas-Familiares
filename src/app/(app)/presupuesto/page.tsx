@@ -84,6 +84,17 @@ export default function PresupuestoPage() {
     return mapa;
   }, [vista]);
 
+  // orden: primero con tope en $ o %, despues las de "= gasto real", al final las sin asignar
+  const categoriasOrdenadas = useMemo(() => {
+    const grupoDe = (c: Categoria) => {
+      const tipo = vistaPorCategoria.get(c.nombre)?.tipo;
+      if (tipo === "FIJO" || tipo === "PORCENTAJE") return 0;
+      if (tipo === "REAL") return 1;
+      return 2;
+    };
+    return [...categorias].sort((a, b) => grupoDe(a) - grupoDe(b));
+  }, [categorias, vistaPorCategoria]);
+
   const sumaTopes = useMemo(() => vista.reduce((acc, v) => acc + v.tope, 0), [vista]);
   const disponibleParaPresupuestar = ingresoRecurrente - gastoNoPresupuestable;
   const ahorroProyectado = disponibleParaPresupuestar - sumaTopes;
@@ -165,9 +176,10 @@ export default function PresupuestoPage() {
       </button>
 
       <div className="space-y-2">
-        {categorias.map((c) => {
+        {categoriasOrdenadas.map((c) => {
           const fila = ediciones[c.id] ?? { tipo: "FIJO" as TipoTope, valorTexto: "" };
           const v = vistaPorCategoria.get(c.nombre);
+          const esReal = v?.tipo === "REAL";
           const color = v ? colorSemaforo(v.gastado, v.tope) : "verde";
           const pct = v && v.tope > 0 ? Math.min(100, Math.round((v.gastado / v.tope) * 100)) : 0;
 
@@ -177,14 +189,14 @@ export default function PresupuestoPage() {
                 <span className="text-sm font-medium text-slate-700">{c.nombre}</span>
                 {v && (
                   <span className="text-xs text-slate-500">
-                    {formatoPesos(v.gastado)} / {formatoPesos(v.tope)}
+                    {formatoPesos(v.gastado)} {esReal ? "" : `/ ${formatoPesos(v.tope)}`}
                   </span>
                 )}
               </div>
 
               {v && (
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div className={`h-full ${CLASES_SEMAFORO[color]}`} style={{ width: `${pct}%` }} />
+                  <div className={`h-full ${esReal ? "bg-sky-400" : CLASES_SEMAFORO[color]}`} style={{ width: `${pct}%` }} />
                 </div>
               )}
 

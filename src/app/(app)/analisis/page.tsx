@@ -280,8 +280,31 @@ export default function AnalisisPage() {
                 );
               })}
             </div>
-            {mesesSeleccionados.size === 0 && (
+            {mesesSeleccionados.size === 0 ? (
               <p className="mt-2 text-xs text-slate-400">Elige uno o mas meses para filtrar.</p>
+            ) : (
+              <div className="mt-3 border-t border-slate-100 pt-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">Meses elegidos (de cualquier año)</span>
+                  <button type="button" onClick={() => setMesesSeleccionados(new Set())} className="text-[11px] text-blue-600">
+                    Limpiar todo
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from(mesesSeleccionados)
+                    .sort()
+                    .map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => alternarMes(p)}
+                        className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700"
+                      >
+                        {etiquetaPeriodo(p)} ✕
+                      </button>
+                    ))}
+                </div>
+              </div>
             )}
           </div>
         )}

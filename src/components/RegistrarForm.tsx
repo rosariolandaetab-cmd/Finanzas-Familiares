@@ -207,7 +207,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   }
 
   return (
-    <div className="mx-auto min-h-dvh max-w-md space-y-6 p-4 pb-10">
+    <div className="mx-auto max-w-md space-y-6 p-4">
       {pendientesSync > 0 && (
         <p className="rounded-lg bg-amber-100 px-3 py-2 text-center text-sm text-amber-800">
           {pendientesSync} movimiento(s) esperando señal para sincronizar
