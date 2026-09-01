@@ -42,14 +42,14 @@ export function AppMenu() {
       </button>
 
       {abierto && (
-        <div className="fixed inset-0 z-40 flex flex-col bg-ink/97 p-6 backdrop-blur">
+        <div className="fixed inset-0 z-40 flex flex-col bg-ink p-6">
           <div className="mx-auto flex w-full max-w-md items-center justify-between">
             <span className="text-lg font-semibold text-white">Finanzas Familiares</span>
             <button
               type="button"
               onClick={() => setAbierto(false)}
               aria-label="Cerrar menu"
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl text-white"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-xl text-ink"
             >
               ✕
             </button>
@@ -63,7 +63,7 @@ export function AppMenu() {
                   key={item.href}
                   href={item.href}
                   className={`flex aspect-square flex-col items-center justify-center rounded-2xl text-center text-base font-semibold ${
-                    activo ? "bg-clay text-white" : "bg-white/10 text-white"
+                    activo ? "bg-clay text-white" : "bg-white text-ink"
                   }`}
                 >
                   {item.etiqueta}
