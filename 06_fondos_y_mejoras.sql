@@ -8,12 +8,12 @@
 create or replace view v_presupuesto_mes as
 select p.periodo,
        c.nombre as categoria,
-       c.grupo  as grupo,
        p.tipo,
        p.valor,
        case when p.tipo='FIJO' then p.valor
             else round(p.valor * coalesce(r.ingreso_recurrente,0) / 1000) * 1000 end as tope,
-       coalesce(g.gastado, 0) as gastado
+       coalesce(g.gastado, 0) as gastado,
+       c.grupo  as grupo
 from presupuestos p
 join categorias c on c.id = p.categoria_id
 left join v_resumen_mensual r on r.periodo = p.periodo
