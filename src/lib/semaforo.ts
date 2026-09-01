@@ -3,7 +3,7 @@ export type ColorSemaforo = "verde" | "ambar" | "rojo";
 export function colorSemaforo(gastado: number, tope: number): ColorSemaforo {
   if (tope <= 0) return gastado > 0 ? "rojo" : "verde";
   const pct = gastado / tope;
-  if (pct >= 1) return "rojo";
+  if (pct > 1) return "rojo";
   if (pct >= 0.8) return "ambar";
   return "verde";
 }

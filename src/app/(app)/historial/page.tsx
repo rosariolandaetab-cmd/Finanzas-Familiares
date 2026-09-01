@@ -31,6 +31,9 @@ export default function HistorialPage() {
   const [movimientos, setMovimientos] = useState<VMovimiento[]>([]);
   const [cargando, setCargando] = useState(true);
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [seleccionMultiple, setSeleccionMultiple] = useState(false);
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [marcandoPagados, setMarcandoPagados] = useState(false);
 
   useEffect(() => {
     // sin filtrar por activa: en el historial hay movimientos viejos con
@@ -77,6 +80,33 @@ export default function HistorialPage() {
     cargarMovimientos();
   }
 
+  function alternarSeleccion(m: VMovimiento) {
+    if (m.estado !== "PENDIENTE") return;
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(m.id)) next.delete(m.id);
+      else next.add(m.id);
+      return next;
+    });
+  }
+
+  async function marcarSeleccionadosComoPagados() {
+    setMarcandoPagados(true);
+    const pendientes = movimientos.filter((m) => seleccionados.has(m.id));
+    await Promise.all(
+      pendientes.map((m) =>
+        supabase
+          .from("movimientos")
+          .update({ estado: "PAGADO", fecha_caja: m.fecha_compra, actualizado_en: new Date().toISOString() })
+          .eq("id", m.id)
+      )
+    );
+    setMarcandoPagados(false);
+    setSeleccionados(new Set());
+    setSeleccionMultiple(false);
+    cargarMovimientos();
+  }
+
   return (
     <div className="mx-auto max-w-md space-y-4 p-4">
       <div className="flex items-center justify-between">
@@ -85,14 +115,31 @@ export default function HistorialPage() {
         ) : (
           <SelectorPeriodo periodo={periodo} onChange={setPeriodo} />
         )}
-        <button
-          type="button"
-          onClick={() => setTodosLosMeses((v) => !v)}
-          className="text-xs text-clay underline"
-        >
-          {todosLosMeses ? "Filtrar por mes" : "Ver todos"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSeleccionMultiple((v) => !v);
+              setSeleccionados(new Set());
+              setEditandoId(null);
+            }}
+            className="text-xs text-clay underline"
+          >
+            {seleccionMultiple ? "Cancelar seleccion" : "Marcar varios pagados"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTodosLosMeses((v) => !v)}
+            className="text-xs text-clay underline"
+          >
+            {todosLosMeses ? "Filtrar por mes" : "Ver todos"}
+          </button>
+        </div>
       </div>
+
+      {seleccionMultiple && (
+        <p className="text-xs text-taupe/70">Toca los movimientos pendientes que quieras marcar como pagados.</p>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -167,35 +214,54 @@ export default function HistorialPage() {
       ) : movimientos.length === 0 ? (
         <p className="py-8 text-center text-taupe/70">No hay movimientos con estos filtros.</p>
       ) : (
-        <div className="space-y-2">
-          {movimientos.map((m) =>
-            editandoId === m.id ? (
-              <FilaEdicion
-                key={m.id}
-                movimiento={m}
-                categorias={categorias}
-                cuentas={cuentas}
-                onCancelar={() => setEditandoId(null)}
-                onGuardado={() => {
-                  setEditandoId(null);
-                  cargarMovimientos();
-                }}
-                onBorrar={() => borrar(m.id)}
-              />
-            ) : (
+        <div className="space-y-2 pb-16">
+          {movimientos.map((m) => {
+            if (!seleccionMultiple && editandoId === m.id) {
+              return (
+                <FilaEdicion
+                  key={m.id}
+                  movimiento={m}
+                  categorias={categorias}
+                  cuentas={cuentas}
+                  onCancelar={() => setEditandoId(null)}
+                  onGuardado={() => {
+                    setEditandoId(null);
+                    cargarMovimientos();
+                  }}
+                  onBorrar={() => borrar(m.id)}
+                />
+              );
+            }
+            const seleccionable = seleccionMultiple && m.estado === "PENDIENTE";
+            const seleccionado = seleccionados.has(m.id);
+            return (
               <button
                 key={m.id}
                 type="button"
-                onClick={() => setEditandoId(m.id)}
-                className="w-full rounded-2xl bg-white p-3 text-left ring-1 ring-sand"
+                onClick={() => (seleccionMultiple ? alternarSeleccion(m) : setEditandoId(m.id))}
+                disabled={seleccionMultiple && !seleccionable}
+                className={`w-full rounded-2xl bg-white p-3 text-left ring-1 ${
+                  seleccionado ? "ring-2 ring-clay" : "ring-sand"
+                } ${seleccionMultiple && !seleccionable ? "opacity-40" : ""}`}
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-ink">{m.categoria}</p>
-                    <p className="text-xs text-taupe/70">
-                      {new Date(m.fecha_compra + "T00:00:00").toLocaleDateString("es-CL")}
-                      {m.comentario ? ` · ${m.comentario}` : ""}
-                    </p>
+                  <div className="flex items-center gap-2">
+                    {seleccionMultiple && (
+                      <span
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
+                          seleccionado ? "bg-clay text-white" : "bg-cream text-taupe/70"
+                        }`}
+                      >
+                        {seleccionado ? "✓" : ""}
+                      </span>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-ink">{m.categoria}</p>
+                      <p className="text-xs text-taupe/70">
+                        {new Date(m.fecha_compra + "T00:00:00").toLocaleDateString("es-CL")}
+                        {m.comentario ? ` · ${m.comentario}` : ""}
+                      </p>
+                    </div>
                   </div>
                   <div className="text-right">
                     <p
@@ -215,8 +281,21 @@ export default function HistorialPage() {
                   </div>
                 </div>
               </button>
-            )
-          )}
+            );
+          })}
+        </div>
+      )}
+
+      {seleccionMultiple && seleccionados.size > 0 && (
+        <div className="fixed inset-x-0 bottom-20 mx-auto w-fit">
+          <button
+            type="button"
+            onClick={marcarSeleccionadosComoPagados}
+            disabled={marcandoPagados}
+            className="rounded-full bg-clay px-6 py-3 text-sm font-semibold text-white shadow-lg disabled:opacity-50"
+          >
+            {marcandoPagados ? "Guardando..." : `Marcar ${seleccionados.size} como pagado`}
+          </button>
         </div>
       )}
     </div>

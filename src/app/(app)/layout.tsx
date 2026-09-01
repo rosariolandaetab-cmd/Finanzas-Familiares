@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase/client";
 import { Login } from "@/components/Login";
-import { BottomNav } from "@/components/BottomNav";
+import { AppMenu } from "@/components/AppMenu";
 import { AuthProvider } from "@/context/AuthContext";
 import type { Persona } from "@/types/database";
 
@@ -54,7 +54,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </button>
       </div>
       <div className="pb-20">{children}</div>
-      <BottomNav />
+      <AppMenu />
     </AuthProvider>
   );
 }

@@ -127,6 +127,7 @@ export type PresupuestoInsert = {
 export type VPresupuestoMes = {
   periodo: string;
   categoria: string;
+  grupo: string;
   tipo: TipoTope;
   valor: number;
   tope: number;
@@ -173,6 +174,46 @@ export type MovimientoInversionInsert = {
 
 // vista v_inversion_saldos
 export type VInversionSaldo = {
+  id: number;
+  nombre: string;
+  saldo_actual: number;
+};
+
+export type Fondo = {
+  id: number;
+  nombre: string;
+  aporte_mensual: number;
+  saldo_objetivo: number | null;
+  saldo_inicial: number;
+  activo: boolean;
+};
+
+export type TipoMovFondo = "APORTE" | "RETIRO";
+
+export type MovimientoFondo = {
+  id: string;
+  fecha: string;
+  tipo: TipoMovFondo;
+  fondo_id: number;
+  monto: number;
+  movimiento_id: string | null;
+  comentario: string | null;
+  creado_por: number | null;
+  creado_en: string;
+};
+
+export type MovimientoFondoInsert = {
+  fecha: string;
+  tipo: TipoMovFondo;
+  fondo_id: number;
+  monto: number;
+  movimiento_id: string | null;
+  comentario: string | null;
+  creado_por: number | null;
+};
+
+// vista v_fondos_saldos
+export type VFondoSaldo = {
   id: number;
   nombre: string;
   saldo_actual: number;
@@ -229,6 +270,18 @@ export type Database = {
         Update: Partial<MovimientoInversionInsert>;
         Relationships: [];
       };
+      fondos: {
+        Row: Fondo;
+        Insert: Partial<Fondo>;
+        Update: Partial<Fondo>;
+        Relationships: [];
+      };
+      fondos_movimientos: {
+        Row: MovimientoFondo;
+        Insert: MovimientoFondoInsert;
+        Update: Partial<MovimientoFondoInsert>;
+        Relationships: [];
+      };
     };
     Views: {
       v_movimientos: {
@@ -249,6 +302,10 @@ export type Database = {
       };
       v_inversion_saldos: {
         Row: VInversionSaldo;
+        Relationships: [];
+      };
+      v_fondos_saldos: {
+        Row: VFondoSaldo;
         Relationships: [];
       };
     };

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { encolarMovimiento, sincronizarPendientes } from "@/lib/offlineQueue";
 import { hoyISO, periodoActual } from "@/lib/formato";
 import { repartirAporteInversion } from "@/lib/inversion";
+import { esCodigoAporteFondo, registrarAporteFondo } from "@/lib/fondos";
 import type { Categoria, Cuenta, MovimientoInsert, Persona, TipoFlujo } from "@/types/database";
 
 type MedioPago = "DEBITO" | "CREDITO";
@@ -182,6 +183,15 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
       await repartirAporteInversion({
         movimientoId: insertado.id,
         periodo: periodoActual(),
+        monto: montoNumero,
+        fecha,
+        creadoPor: persona?.id ?? null,
+      });
+    }
+    if (esCodigoAporteFondo(categoriaElegida?.codigo) && insertado) {
+      await registrarAporteFondo({
+        movimientoId: insertado.id,
+        codigoCategoria: categoriaElegida!.codigo,
         monto: montoNumero,
         fecha,
         creadoPor: persona?.id ?? null,

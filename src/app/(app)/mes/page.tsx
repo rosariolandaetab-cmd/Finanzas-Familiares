@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { formatoPesos, periodoActual } from "@/lib/formato";
 import { CLASES_SEMAFORO, colorSemaforo } from "@/lib/semaforo";
+import { aportesInversionPeriodo } from "@/lib/inversion";
+import { aportesFondosPeriodo } from "@/lib/fondos";
 import { SelectorPeriodo } from "@/components/SelectorPeriodo";
 import { WaterfallChart } from "@/components/WaterfallChart";
+import { DesgloseSegmentado } from "@/components/DesgloseSegmentado";
 import type { Cuenta, VDeudaTarjeta, VMovimiento, VPresupuestoMes, VResumenMensual } from "@/types/database";
 
 function proximoVencimiento(diaVencimiento: number | null): string | null {
@@ -18,16 +21,29 @@ function proximoVencimiento(diaVencimiento: number | null): string | null {
   return candidato.toLocaleDateString("es-CL", { day: "numeric", month: "long" });
 }
 
+function nivelFijosDeudas(pct: number): { color: "verde" | "ambar" | "rojo"; etiqueta: string } {
+  if (pct > 0.7) return { color: "rojo", etiqueta: "Critico" };
+  if (pct > 0.5) return { color: "ambar", etiqueta: "Atencion" };
+  return { color: "verde", etiqueta: "Saludable" };
+}
+
+const CLASE_TEXTO_NIVEL: Record<"verde" | "ambar" | "rojo", string> = {
+  verde: "text-emerald-600",
+  ambar: "text-amber-600",
+  rojo: "text-red-600",
+};
+
 export default function MesPage() {
   const [periodo, setPeriodo] = useState(periodoActual());
   const [cargando, setCargando] = useState(true);
   const [resumen, setResumen] = useState<VResumenMensual | null>(null);
-  const [gastoRecurrente, setGastoRecurrente] = useState(0);
   const [presupuestoMes, setPresupuestoMes] = useState<VPresupuestoMes[]>([]);
   const [deudas, setDeudas] = useState<VDeudaTarjeta[]>([]);
   const [tarjetas, setTarjetas] = useState<Cuenta[]>([]);
   const [movimientosGasto, setMovimientosGasto] = useState<VMovimiento[]>([]);
   const [categoriaAbierta, setCategoriaAbierta] = useState<string | null>(null);
+  const [ahorroFondosEInversion, setAhorroFondosEInversion] = useState(0);
+  const [mostrarInfoFijos, setMostrarInfoFijos] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -35,19 +51,14 @@ export default function MesPage() {
       setCargando(true);
       const [
         { data: resumenData },
-        { data: movsRecurrentes },
         { data: presupuestoData },
         { data: deudaData },
         { data: tarjetasData },
         { data: movsGasto },
+        aportesFondos,
+        aportesInversion,
       ] = await Promise.all([
         supabase.from("v_resumen_mensual").select("*").eq("periodo", periodo).maybeSingle(),
-        supabase
-          .from("v_movimientos")
-          .select("monto")
-          .eq("periodo_devengado", periodo)
-          .eq("tipo_flujo", "GASTO")
-          .eq("recurrencia", "RECURRENTE"),
         supabase.from("v_presupuesto_mes").select("*").eq("periodo", periodo),
         supabase.from("v_deuda_tarjeta").select("*"),
         supabase.from("cuentas").select("*").eq("tipo", "TARJETA_CREDITO").eq("activa", true),
@@ -57,14 +68,16 @@ export default function MesPage() {
           .eq("periodo_devengado", periodo)
           .eq("tipo_flujo", "GASTO")
           .order("fecha_compra", { ascending: false }),
+        aportesFondosPeriodo(periodo),
+        aportesInversionPeriodo(periodo),
       ]);
       if (cancelado) return;
       setResumen(resumenData ?? null);
-      setGastoRecurrente((movsRecurrentes ?? []).reduce((acc, m) => acc + m.monto, 0));
       setPresupuestoMes(presupuestoData ?? []);
       setDeudas(deudaData ?? []);
       setTarjetas(tarjetasData ?? []);
       setMovimientosGasto(movsGasto ?? []);
+      setAhorroFondosEInversion(aportesFondos + aportesInversion);
       setCategoriaAbierta(null);
       setCargando(false);
     }
@@ -87,12 +100,10 @@ export default function MesPage() {
     };
     const ingresoTotal = r.ingreso_recurrente + r.ingreso_extraordinario;
     const resultado = ingresoTotal - r.gasto_total;
-    const tasaAhorroRecurrente =
-      r.ingreso_recurrente > 0 ? (r.ingreso_recurrente - gastoRecurrente) / r.ingreso_recurrente : 0;
-    const fijosDeudasSobreIngreso =
-      r.ingreso_recurrente > 0 ? (r.fijos + r.deudas) / r.ingreso_recurrente : 0;
-    return { ...r, resultado, tasaAhorroRecurrente, fijosDeudasSobreIngreso };
-  }, [resumen, gastoRecurrente]);
+    const tasaAhorro = ingresoTotal > 0 ? ahorroFondosEInversion / ingresoTotal : 0;
+    const fijosDeudasSobreIngreso = r.ingreso_recurrente > 0 ? (r.fijos + r.deudas) / r.ingreso_recurrente : 0;
+    return { ...r, ingresoTotal, resultado, tasaAhorro, fijosDeudasSobreIngreso };
+  }, [resumen, ahorroFondosEInversion]);
 
   const pasosCascada = useMemo(
     () => [
@@ -102,21 +113,12 @@ export default function MesPage() {
       { nombre: "Deudas", delta: -indicadores.deudas, tipo: "salida" as const },
       { nombre: "Asignacion personal", delta: -indicadores.asignacion_personal, tipo: "salida" as const },
       { nombre: "Variables", delta: -indicadores.variables, tipo: "salida" as const },
-      { nombre: "Fondos", delta: -indicadores.fondos, tipo: "salida" as const },
       { nombre: "Resultado", delta: indicadores.resultado, tipo: "resultado" as const },
     ],
     [indicadores]
   );
 
-  const categoriasOrdenadas = useMemo(
-    () =>
-      [...presupuestoMes].sort((a, b) => {
-        const pctA = a.tope > 0 ? a.gastado / a.tope : a.gastado > 0 ? Infinity : 0;
-        const pctB = b.tope > 0 ? b.gastado / b.tope : b.gastado > 0 ? Infinity : 0;
-        return pctB - pctA;
-      }),
-    [presupuestoMes]
-  );
+  const nivelFijos = nivelFijosDeudas(indicadores.fijosDeudasSobreIngreso);
 
   if (cargando) {
     return <div className="flex min-h-[60dvh] items-center justify-center text-taupe/70">Cargando...</div>;
@@ -157,15 +159,46 @@ export default function MesPage() {
           negativo={indicadores.resultado < 0}
         />
         <Indicador
-          etiqueta="Tasa de ahorro recurrente"
-          valor={`${Math.round(indicadores.tasaAhorroRecurrente * 100)}%`}
-          negativo={indicadores.tasaAhorroRecurrente < 0}
+          etiqueta="Ahorro (fondos + inversion)"
+          valor={`${Math.round(indicadores.tasaAhorro * 100)}%`}
         />
-        <Indicador
-          etiqueta="Fijos + deudas / ingreso"
-          valor={`${Math.round(indicadores.fijosDeudasSobreIngreso * 100)}%`}
-        />
+        <button type="button" onClick={() => setMostrarInfoFijos((v) => !v)} className="text-left">
+          <div className="rounded-2xl bg-white p-3 ring-1 ring-sand">
+            <p className="text-[11px] text-taupe">Fijos + deudas / ingreso</p>
+            <p className={`mt-1 text-lg font-semibold ${CLASE_TEXTO_NIVEL[nivelFijos.color]}`}>
+              {Math.round(indicadores.fijosDeudasSobreIngreso * 100)}%
+            </p>
+            <p className={`text-[10px] font-medium uppercase ${CLASE_TEXTO_NIVEL[nivelFijos.color]}`}>
+              {nivelFijos.etiqueta} · toca para ver
+            </p>
+          </div>
+        </button>
       </div>
+
+      {mostrarInfoFijos && (
+        <div className="rounded-2xl bg-white p-4 text-sm ring-1 ring-sand">
+          <p className="font-medium text-ink">¿Que significa este numero?</p>
+          <p className="mt-1 text-taupe">
+            Es cuanto de tu ingreso recurrente ya esta comprometido en gastos fijos (arriendo, cuentas, seguros) y
+            deudas, antes de gastar en variables o guardar algo.
+          </p>
+          <ul className="mt-2 space-y-1 text-taupe">
+            <li>
+              <span className="font-medium text-emerald-600">Hasta 50%: saludable.</span> Te queda buen margen para
+              variables y ahorro.
+            </li>
+            <li>
+              <span className="font-medium text-amber-600">50% a 70%: atencion.</span> Queda poco margen; conviene no
+              sumar mas gastos fijos ni deudas nuevas.
+            </li>
+            <li>
+              <span className="font-medium text-red-600">Sobre 70%: critico.</span> Casi todo el ingreso esta
+              comprometido. Revisa si puedes renegociar deudas, bajar algun gasto fijo (suscripciones, planes) o
+              aumentar el ingreso recurrente.
+            </li>
+          </ul>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-2 text-sm font-medium text-taupe">Flujo del mes</h2>
@@ -176,22 +209,21 @@ export default function MesPage() {
 
       <div>
         <h2 className="mb-2 text-sm font-medium text-taupe">Categorias vs presupuesto</h2>
-        {categoriasOrdenadas.length === 0 ? (
+        {presupuestoMes.length === 0 ? (
           <p className="text-sm text-taupe/70">
             Todavia no hay presupuesto definido para este mes. Configuralo en la pestana Presupuesto.
           </p>
         ) : (
-          <div className="space-y-2">
-            {categoriasOrdenadas.map((c) => {
+          <DesgloseSegmentado
+            filas={presupuestoMes}
+            keyDe={(c) => c.categoria}
+            renderFila={(c) => {
               const color = colorSemaforo(c.gastado, c.tope);
               const pct = c.tope > 0 ? Math.min(100, Math.round((c.gastado / c.tope) * 100)) : 100;
               const abierta = categoriaAbierta === c.categoria;
-              const movsCategoria = abierta
-                ? movimientosGasto.filter((m) => m.categoria === c.categoria)
-                : [];
+              const movsCategoria = abierta ? movimientosGasto.filter((m) => m.categoria === c.categoria) : [];
               return (
                 <button
-                  key={c.categoria}
                   type="button"
                   onClick={() => setCategoriaAbierta(abierta ? null : c.categoria)}
                   className="w-full rounded-2xl bg-white p-3 text-left ring-1 ring-sand"
@@ -224,8 +256,8 @@ export default function MesPage() {
                   )}
                 </button>
               );
-            })}
-          </div>
+            }}
+          />
         )}
       </div>
     </div>

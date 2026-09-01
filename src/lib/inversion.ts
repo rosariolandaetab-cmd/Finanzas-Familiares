@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { sumarMesesAPeriodo } from "@/lib/formato";
 import type { MovimientoInversionInsert, TipoMovInversion, VInversionSaldo } from "@/types/database";
 
 const CODIGO_SUELDO_ROCHA = "IN-01";
@@ -260,4 +261,14 @@ export async function registrarRetiro({
 
 export async function actualizarSaldoInicial(participanteId: number, saldoInicial: number) {
   await supabase.from("inversion_participantes").update({ saldo_inicial: saldoInicial }).eq("id", participanteId);
+}
+
+export async function aportesInversionPeriodo(periodo: string): Promise<number> {
+  const { data } = await supabase
+    .from("inversion_movimientos")
+    .select("monto")
+    .eq("tipo", "APORTE")
+    .gte("fecha", `${periodo}-01`)
+    .lt("fecha", `${sumarMesesAPeriodo(periodo, 1)}-01`);
+  return (data ?? []).reduce((a, m) => a + m.monto, 0);
 }
