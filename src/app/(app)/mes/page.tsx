@@ -218,6 +218,7 @@ export default function MesPage() {
             filas={presupuestoMes}
             keyDe={(c) => c.categoria}
             renderFila={(c) => {
+              const esReal = c.tipo === "REAL";
               const color = colorSemaforo(c.gastado, c.tope);
               const pct = c.tope > 0 ? Math.min(100, Math.round((c.gastado / c.tope) * 100)) : 100;
               const abierta = categoriaAbierta === c.categoria;
@@ -231,11 +232,11 @@ export default function MesPage() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium text-ink">{c.categoria}</span>
                     <span className="text-taupe">
-                      {formatoPesos(c.gastado)} / {formatoPesos(c.tope)}
+                      {formatoPesos(c.gastado)} {esReal ? "" : `/ ${formatoPesos(c.tope)}`}
                     </span>
                   </div>
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-cream">
-                    <div className={`h-full ${CLASES_SEMAFORO[color]}`} style={{ width: `${pct}%` }} />
+                    <div className={`h-full ${esReal ? "bg-sky-400" : CLASES_SEMAFORO[color]}`} style={{ width: `${pct}%` }} />
                   </div>
                   {abierta && (
                     <div className="mt-3 space-y-1.5 border-t border-sand/60 pt-2">

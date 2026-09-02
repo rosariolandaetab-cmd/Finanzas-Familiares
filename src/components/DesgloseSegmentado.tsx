@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { formatoPesos } from "@/lib/formato";
-import { CLASES_SEMAFORO, colorSemaforo } from "@/lib/semaforo";
 
 export type FilaDesglose = {
   grupo: string;
@@ -29,7 +28,7 @@ export function DesgloseSegmentado<T extends FilaDesglose>({
   renderFila: (fila: T) => React.ReactNode;
   keyDe: (fila: T) => string;
 }) {
-  const [colapsados, setColapsados] = useState<Set<string>>(new Set());
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
 
   const grupos = new Map<string, T[]>();
   for (const f of filas) {
@@ -40,22 +39,20 @@ export function DesgloseSegmentado<T extends FilaDesglose>({
   const nombresGrupos = [...grupos.keys()].sort((a, b) => ORDEN_GRUPOS.indexOf(a) - ORDEN_GRUPOS.indexOf(b));
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {nombresGrupos.map((g) => {
         const items = grupos.get(g)!;
         const totalGastado = items.reduce((a, f) => a + f.gastado, 0);
         const totalTope = items.reduce((a, f) => a + f.tope, 0);
-        const color = colorSemaforo(totalGastado, totalTope);
-        const pct =
-          totalTope > 0 ? Math.min(100, Math.round((totalGastado / totalTope) * 100)) : totalGastado > 0 ? 100 : 0;
-        const colapsado = colapsados.has(g);
+        const pct = totalTope > 0 ? Math.min(100, Math.round((totalGastado / totalTope) * 100)) : 0;
+        const expandido = expandidos.has(g);
 
         return (
-          <div key={g} className="space-y-2">
+          <div key={g}>
             <button
               type="button"
               onClick={() =>
-                setColapsados((prev) => {
+                setExpandidos((prev) => {
                   const next = new Set(prev);
                   if (next.has(g)) next.delete(g);
                   else next.add(g);
@@ -65,22 +62,20 @@ export function DesgloseSegmentado<T extends FilaDesglose>({
               className="w-full rounded-2xl bg-white p-3 text-left ring-1 ring-sand"
             >
               <div className="flex items-center justify-between text-sm">
-                <span className="font-semibold text-ink">{g}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-taupe">
-                    {formatoPesos(totalGastado)}
-                    {totalTope > 0 ? ` / ${formatoPesos(totalTope)}` : ""}
-                  </span>
-                  <span className="text-taupe/70">{colapsado ? "▸" : "▾"}</span>
-                </div>
+                <span className="font-medium text-ink">{g}</span>
+                <span className="flex items-center gap-2 text-xs text-taupe">
+                  {formatoPesos(totalGastado)}
+                  {totalTope > 0 ? ` / ${formatoPesos(totalTope)}` : ""}
+                  <span className="text-taupe/50">{expandido ? "▾" : "▸"}</span>
+                </span>
               </div>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-cream">
-                <div className={`h-full ${CLASES_SEMAFORO[color]}`} style={{ width: `${pct}%` }} />
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-cream">
+                <div className="h-full bg-taupe" style={{ width: `${pct}%` }} />
               </div>
             </button>
 
-            {!colapsado && (
-              <div className="space-y-2 pl-2">
+            {expandido && (
+              <div className="mt-2 space-y-2 pl-2">
                 {items.map((f) => (
                   <div key={keyDe(f)}>{renderFila(f)}</div>
                 ))}
