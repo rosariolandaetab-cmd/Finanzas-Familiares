@@ -4,14 +4,16 @@ import type { MovimientoFondoInsert, VFondoSaldo } from "@/types/database";
 
 const CODIGO_RETIRO_FONDO = "TR-06";
 
-const NOMBRE_FONDO_POR_CODIGO: Record<string, string> = {
-  "FO-01": "Vacaciones",
-  "FO-02": "Casa y equipamiento",
-  "FO-03": "Fondo de reserva",
-};
-
-export function esCodigoAporteFondo(codigo: string | undefined | null): boolean {
-  return !!codigo && codigo in NOMBRE_FONDO_POR_CODIGO;
+// Cada fondo tiene su propia categoria de Transferencia (fondos.categoria_id):
+// al elegirla en Registrar se registra el aporte a ese fondo.
+export async function fondoDeCategoria(categoriaId: number): Promise<number | null> {
+  const { data } = await supabase
+    .from("fondos")
+    .select("id")
+    .eq("categoria_id", categoriaId)
+    .eq("activo", true)
+    .maybeSingle();
+  return data?.id ?? null;
 }
 
 async function idCategoria(codigo: string): Promise<number | null> {
@@ -29,34 +31,30 @@ export async function obtenerSaldosFondos(): Promise<VFondoSaldo[]> {
   return data ?? [];
 }
 
-// Registra el aporte a un fondo especifico, a partir de un movimiento de
-// Transferencia ya guardado (categoria = Vacaciones / Casa y equipamiento /
-// Fondo de reserva).
+// Registra el aporte a un fondo, a partir de un movimiento de Transferencia
+// ya guardado con la categoria de ese fondo.
 export async function registrarAporteFondo({
   movimientoId,
-  codigoCategoria,
+  fondoId,
   monto,
   fecha,
+  comentario,
   creadoPor,
 }: {
   movimientoId: string;
-  codigoCategoria: string;
+  fondoId: number;
   monto: number;
   fecha: string;
+  comentario: string | null;
   creadoPor: number | null;
 }) {
-  const nombreFondo = NOMBRE_FONDO_POR_CODIGO[codigoCategoria];
-  if (!nombreFondo) return;
-  const { data: fondo } = await supabase.from("fondos").select("id").eq("nombre", nombreFondo).maybeSingle();
-  if (!fondo) return;
-
   const fila: MovimientoFondoInsert = {
     fecha,
     tipo: "APORTE",
-    fondo_id: fondo.id,
+    fondo_id: fondoId,
     monto,
     movimiento_id: movimientoId,
-    comentario: null,
+    comentario,
     creado_por: creadoPor,
   };
   await supabase.from("fondos_movimientos").insert(fila);
@@ -112,6 +110,48 @@ export async function registrarRetiroFondo({
 
 export async function actualizarSaldoInicialFondo(fondoId: number, saldoInicial: number) {
   await supabase.from("fondos").update({ saldo_inicial: saldoInicial }).eq("id", fondoId);
+}
+
+// Crea el fondo y su categoria de Transferencia (grupo "Fondos"), para que
+// aparezca en Registrar como destino de aportes.
+export async function crearFondo(nombre: string): Promise<{ error: string | null }> {
+  const { data: codigos } = await supabase.from("categorias").select("codigo, orden").like("codigo", "FO-%");
+  const siguiente =
+    Math.max(0, ...(codigos ?? []).map((c) => Number(c.codigo.slice(3)) || 0)) + 1;
+  const orden = Math.max(0, ...(codigos ?? []).map((c) => c.orden)) + 1;
+
+  const { data: categoria, error: errorCat } = await supabase
+    .from("categorias")
+    .insert({
+      codigo: `FO-${String(siguiente).padStart(2, "0")}`,
+      tipo: "TRANSFERENCIA",
+      grupo: "Fondos",
+      nombre,
+      orden,
+      activa: true,
+      presupuestable: false,
+    })
+    .select("id")
+    .single();
+  if (errorCat || !categoria) return { error: "No se pudo crear la categoria del fondo." };
+
+  const { error } = await supabase.from("fondos").insert({ nombre, activo: true, saldo_inicial: 0, categoria_id: categoria.id });
+  if (error) return { error: "No se pudo crear el fondo." };
+  return { error: null };
+}
+
+// No se borra: se desactiva el fondo y su categoria, asi el historial queda
+// intacto. Solo se permite con saldo en cero.
+export async function eliminarFondo(fondo: VFondoSaldo): Promise<{ error: string | null }> {
+  if (fondo.saldo_actual !== 0) {
+    return { error: "Este fondo todavia tiene saldo. Retiralo o ajusta el saldo antes de eliminarlo." };
+  }
+  const { data } = await supabase.from("fondos").select("categoria_id").eq("id", fondo.id).maybeSingle();
+  await supabase.from("fondos").update({ activo: false }).eq("id", fondo.id);
+  if (data?.categoria_id) {
+    await supabase.from("categorias").update({ activa: false }).eq("id", data.categoria_id);
+  }
+  return { error: null };
 }
 
 export async function aportesFondosPeriodo(periodo: string): Promise<number> {

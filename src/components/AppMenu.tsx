@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
 
 const ITEMS = [
   { href: "/", etiqueta: "Registrar" },
@@ -13,7 +14,7 @@ const ITEMS = [
   { href: "/inversion", etiqueta: "Inversion" },
 ];
 
-export function AppMenu() {
+export function AppMenu({ nombreUsuario }: { nombreUsuario: string }) {
   const pathname = usePathname();
   const [abierto, setAbierto] = useState(false);
 
@@ -70,6 +71,19 @@ export function AppMenu() {
                 </Link>
               );
             })}
+          </div>
+
+          <div className="mx-auto flex w-full max-w-md items-center justify-between text-sm text-white/60">
+            <span>{nombreUsuario}</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("¿Cerrar sesion?")) supabase.auth.signOut();
+              }}
+              className="underline"
+            >
+              Salir
+            </button>
           </div>
         </div>
       )}

@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { formatoPesos, hoyISO } from "@/lib/formato";
-import { actualizarSaldoInicialFondo, obtenerSaldosFondos, registrarRetiroFondo } from "@/lib/fondos";
+import {
+  actualizarSaldoInicialFondo,
+  crearFondo,
+  eliminarFondo,
+  obtenerSaldosFondos,
+  registrarRetiroFondo,
+} from "@/lib/fondos";
 import { supabase } from "@/lib/supabase/client";
 import type { MovimientoFondo, VFondoSaldo } from "@/types/database";
 
@@ -22,17 +28,66 @@ export function FondosTab() {
 
   const [editandoSaldoId, setEditandoSaldoId] = useState<number | null>(null);
   const [saldoInicialTexto, setSaldoInicialTexto] = useState("");
+  const [creando, setCreando] = useState(false);
+  const [nombreNuevo, setNombreNuevo] = useState("");
+  const [nombresFondos, setNombresFondos] = useState<Map<number, string>>(new Map());
+  const [comentariosMov, setComentariosMov] = useState<Map<string, string>>(new Map());
+  const [movAbierto, setMovAbierto] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const [s, { data: hist }] = await Promise.all([
+    const [s, { data: hist }, { data: todosFondos }] = await Promise.all([
       obtenerSaldosFondos(),
       supabase.from("fondos_movimientos").select("*").order("fecha", { ascending: false }).limit(300),
+      supabase.from("fondos").select("id, nombre"),
     ]);
     setSaldos(s);
     setHistorial(hist ?? []);
+    // incluye los fondos eliminados, para que su historial siga teniendo nombre
+    setNombresFondos(new Map((todosFondos ?? []).map((f) => [f.id, f.nombre])));
+    const idsMov = Array.from(new Set((hist ?? []).map((h) => h.movimiento_id).filter((id): id is string => !!id)));
+    if (idsMov.length > 0) {
+      const { data: movs } = await supabase.from("movimientos").select("id, comentario").in("id", idsMov);
+      setComentariosMov(new Map((movs ?? []).filter((m) => m.comentario).map((m) => [m.id, m.comentario as string])));
+    }
     setCargando(false);
   }, []);
+
+  function avisar(texto: string, ms = 2500) {
+    setMensaje(texto);
+    setTimeout(() => setMensaje(null), ms);
+  }
+
+  async function confirmarCreacion() {
+    const nombre = nombreNuevo.trim();
+    if (!nombre) return;
+    if (saldos.some((f) => f.nombre.toLowerCase() === nombre.toLowerCase())) {
+      avisar("Ya existe un fondo con ese nombre.");
+      return;
+    }
+    setGuardando(true);
+    const { error } = await crearFondo(nombre);
+    setGuardando(false);
+    if (error) {
+      avisar(error);
+      return;
+    }
+    avisar("Fondo creado ✓", 2000);
+    setCreando(false);
+    setNombreNuevo("");
+    cargar();
+  }
+
+  async function confirmarEliminacion(fondo: VFondoSaldo) {
+    if (!confirm(`¿Eliminar el fondo "${fondo.nombre}"? Su historial se conserva.`)) return;
+    const { error } = await eliminarFondo(fondo);
+    if (error) {
+      avisar(error, 3500);
+      return;
+    }
+    avisar("Fondo eliminado ✓", 2000);
+    cargar();
+  }
 
   useEffect(() => {
     cargar();
@@ -122,24 +177,73 @@ export function FondosTab() {
                   Ajustar saldo inicial
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  setRetirando(s.id);
-                  setMonto("");
-                }}
-                className="rounded-full bg-cream px-2.5 py-1 font-medium text-ink"
-              >
-                Retirar
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => confirmarEliminacion(s)}
+                  aria-label={`Eliminar ${s.nombre}`}
+                  className="rounded-full px-2 py-1 text-red-600"
+                >
+                  Eliminar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRetirando(s.id);
+                    setMonto("");
+                  }}
+                  className="rounded-full bg-cream px-2.5 py-1 font-medium text-ink"
+                >
+                  Retirar
+                </button>
+              </div>
             </div>
           </div>
         ))}
       </div>
 
+      {creando ? (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            autoFocus
+            placeholder="Nombre del fondo"
+            value={nombreNuevo}
+            onChange={(e) => setNombreNuevo(e.target.value)}
+            className="min-w-0 flex-1 rounded-xl border border-sand px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={confirmarCreacion}
+            disabled={guardando || !nombreNuevo.trim()}
+            className="rounded-xl bg-clay px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            Crear
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCreando(false);
+              setNombreNuevo("");
+            }}
+            className="rounded-xl bg-cream px-3 py-2 text-sm"
+          >
+            Cancelar
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setCreando(true)}
+          className="w-full rounded-2xl border border-dashed border-taupe/40 py-3 text-sm font-medium text-taupe"
+        >
+          + Agregar fondo
+        </button>
+      )}
+
       <p className="text-xs text-taupe/70">
-        Para aportar plata a un fondo, ve a Registrar → Transferencia → Vacaciones / Casa y equipamiento / Fondo de
-        reserva. El fondo de reserva es donde puedes asignar lo que sobra de cada mes, una vez que termine.
+        Para aportar plata a un fondo, ve a Registrar → Transferencia → grupo Fondos y elige el fondo.
+        {saldos.length > 0 ? ` Hoy tienes: ${saldos.map((f) => f.nombre).join(", ")}.` : ""}
       </p>
 
       {retirando && (
@@ -189,19 +293,31 @@ export function FondosTab() {
         <h2 className="mb-2 text-sm font-medium text-taupe">Historial</h2>
         <div className="space-y-1">
           {historial.slice(0, 30).map((h) => {
-            const nombre = saldos.find((s) => s.id === h.fondo_id)?.nombre ?? "?";
+            const nombre = nombresFondos.get(h.fondo_id) ?? "?";
+            const nota = h.comentario ?? (h.movimiento_id ? comentariosMov.get(h.movimiento_id) : undefined);
+            const abierto = movAbierto === h.id;
             return (
-              <div key={h.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-sand">
-                <div>
-                  <span className="font-medium text-ink">{nombre}</span>
-                  <span className="ml-2 text-xs text-taupe/70">{h.tipo.toLowerCase()}</span>
-                  <p className="text-xs text-taupe/70">{new Date(h.fecha + "T00:00:00").toLocaleDateString("es-CL")}</p>
+              <button
+                key={h.id}
+                type="button"
+                onClick={() => setMovAbierto(abierto ? null : h.id)}
+                className="w-full rounded-xl bg-white px-3 py-2 text-left text-sm ring-1 ring-sand"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <span className="font-medium text-ink">{nombre}</span>
+                    <span className="ml-2 text-xs text-taupe/70">{h.tipo.toLowerCase()}</span>
+                    <p className={`text-xs text-taupe/70 ${abierto ? "" : "truncate"}`}>
+                      {new Date(h.fecha + "T00:00:00").toLocaleDateString("es-CL")}
+                      {nota ? ` · ${nota}` : ""}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 pl-2 ${h.tipo === "RETIRO" ? "text-orange-600" : "text-emerald-600"}`}>
+                    {h.tipo === "RETIRO" ? "-" : ""}
+                    {formatoPesos(h.monto)}
+                  </span>
                 </div>
-                <span className={h.tipo === "RETIRO" ? "text-orange-600" : "text-emerald-600"}>
-                  {h.tipo === "RETIRO" ? "-" : ""}
-                  {formatoPesos(h.monto)}
-                </span>
-              </div>
+              </button>
             );
           })}
         </div>

@@ -44,12 +44,14 @@ export async function repartirAporteInversion({
   periodo,
   monto,
   fecha,
+  comentario: comentarioUsuario,
   creadoPor,
 }: {
   movimientoId: string;
   periodo: string;
   monto: number;
   fecha: string;
+  comentario: string | null;
   creadoPor: number | null;
 }) {
   const [catSueldoRocha, catSueldoLalo, rochaId, laloId] = await Promise.all([
@@ -78,7 +80,10 @@ export async function repartirAporteInversion({
   }
 
   const [montoRocha, montoLalo] = repartirMontoExacto(monto, pctRocha);
-  const comentario = sinSueldosRegistrados ? "Reparto 50/50 (sin sueldos registrados ese mes)" : null;
+  const comentario =
+    [comentarioUsuario, sinSueldosRegistrados ? "Reparto 50/50 (sin sueldos registrados ese mes)" : null]
+      .filter(Boolean)
+      .join(" · ") || null;
 
   const filas: MovimientoInversionInsert[] = [
     {

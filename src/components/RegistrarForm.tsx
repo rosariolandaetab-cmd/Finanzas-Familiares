@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { encolarMovimiento, sincronizarPendientes } from "@/lib/offlineQueue";
-import { hoyISO, periodoActual } from "@/lib/formato";
+import { hoyISO } from "@/lib/formato";
 import { repartirAporteInversion } from "@/lib/inversion";
-import { esCodigoAporteFondo, registrarAporteFondo } from "@/lib/fondos";
+import { fondoDeCategoria, registrarAporteFondo } from "@/lib/fondos";
 import type { Categoria, Cuenta, MovimientoInsert, Persona, TipoFlujo } from "@/types/database";
 
 type MedioPago = "DEBITO" | "CREDITO";
@@ -182,20 +182,25 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     if (categoriaElegida?.codigo === CODIGO_APORTE_INVERSION && insertado) {
       await repartirAporteInversion({
         movimientoId: insertado.id,
-        periodo: periodoActual(),
+        periodo: fecha.slice(0, 7),
         monto: montoNumero,
         fecha,
+        comentario: mov.comentario,
         creadoPor: persona?.id ?? null,
       });
     }
-    if (esCodigoAporteFondo(categoriaElegida?.codigo) && insertado) {
-      await registrarAporteFondo({
-        movimientoId: insertado.id,
-        codigoCategoria: categoriaElegida!.codigo,
-        monto: montoNumero,
-        fecha,
-        creadoPor: persona?.id ?? null,
-      });
+    if (categoriaElegida?.grupo === "Fondos" && insertado) {
+      const fondoId = await fondoDeCategoria(categoriaElegida.id);
+      if (fondoId) {
+        await registrarAporteFondo({
+          movimientoId: insertado.id,
+          fondoId,
+          monto: montoNumero,
+          fecha,
+          comentario: mov.comentario,
+          creadoPor: persona?.id ?? null,
+        });
+      }
     }
 
     setMensaje("Guardado ✓");

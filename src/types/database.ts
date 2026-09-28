@@ -185,6 +185,7 @@ export type Fondo = {
   aporte_mensual: number;
   saldo_objetivo: number | null;
   saldo_inicial: number;
+  categoria_id: number | null;
   activo: boolean;
 };
 
@@ -217,6 +218,11 @@ export type VFondoSaldo = {
   id: number;
   nombre: string;
   saldo_actual: number;
+};
+
+export type Configuracion = {
+  clave: string;
+  valor: string;
 };
 
 export type Database = {
@@ -280,6 +286,12 @@ export type Database = {
         Row: MovimientoFondo;
         Insert: MovimientoFondoInsert;
         Update: Partial<MovimientoFondoInsert>;
+        Relationships: [];
+      };
+      configuracion: {
+        Row: Configuracion;
+        Insert: Configuracion;
+        Update: Partial<Configuracion>;
         Relationships: [];
       };
     };

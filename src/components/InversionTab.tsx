@@ -35,6 +35,8 @@ export function InversionTab() {
 
   const [editandoSaldoId, setEditandoSaldoId] = useState<number | null>(null);
   const [saldoInicialTexto, setSaldoInicialTexto] = useState("");
+  const [comentariosMov, setComentariosMov] = useState<Map<string, string>>(new Map());
+  const [operacionAbierta, setOperacionAbierta] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -46,6 +48,13 @@ export function InversionTab() {
     setSaldos(s);
     setParticipantes(parts ?? []);
     setHistorial(hist ?? []);
+    // el comentario de un aporte hecho desde Registrar queda en el movimiento
+    // de la cuenta comun, no en inversion_movimientos: se trae de ahi
+    const idsMov = Array.from(new Set((hist ?? []).map((h) => h.movimiento_id).filter((id): id is string => !!id)));
+    if (idsMov.length > 0) {
+      const { data: movs } = await supabase.from("movimientos").select("id, comentario").in("id", idsMov);
+      setComentariosMov(new Map((movs ?? []).filter((m) => m.comentario).map((m) => [m.id, m.comentario as string])));
+    }
     setCargando(false);
   }, []);
 
@@ -82,6 +91,31 @@ export function InversionTab() {
     }
     return puntos;
   }, [historial, participantes]);
+
+  // cada aporte/ganancia/retiro se guarda como una fila por participante:
+  // se agrupan para mostrar una sola operacion con su reparto
+  const operaciones = useMemo(() => {
+    const porClave = new Map<string, MovimientoInversion[]>();
+    for (const h of historial) {
+      const clave = h.movimiento_id ?? h.id;
+      if (!porClave.has(clave)) porClave.set(clave, []);
+      porClave.get(clave)!.push(h);
+    }
+    return Array.from(porClave.entries()).map(([clave, filas]) => {
+      const notas = [
+        ...(filas[0].movimiento_id ? [comentariosMov.get(filas[0].movimiento_id)] : []),
+        ...filas.map((f) => f.comentario),
+      ].filter((c): c is string => !!c);
+      return {
+        clave,
+        fecha: filas[0].fecha,
+        tipo: filas[0].tipo,
+        total: filas.reduce((a, f) => a + f.monto, 0),
+        comentarios: Array.from(new Set(notas)),
+        filas,
+      };
+    });
+  }, [historial, comentariosMov]);
 
   const seriesParticipantes = participantes.map((p) => ({
     nombre: p.nombre,
@@ -308,17 +342,46 @@ export function InversionTab() {
       <div>
         <h2 className="mb-2 text-sm font-medium text-taupe">Historial</h2>
         <div className="space-y-1">
-          {historial.slice(0, 30).map((h) => {
-            const nombre = participantes.find((p) => p.id === h.participante_id)?.nombre ?? "?";
+          {operaciones.slice(0, 30).map((op) => {
+            const abierta = operacionAbierta === op.clave;
             return (
-              <div key={h.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm ring-1 ring-sand">
-                <div>
-                  <span className="font-medium text-ink">{nombre}</span>
-                  <span className="ml-2 text-xs text-taupe/70">{h.tipo.toLowerCase()}</span>
-                  <p className="text-xs text-taupe/70">{new Date(h.fecha + "T00:00:00").toLocaleDateString("es-CL")}</p>
+              <button
+                key={op.clave}
+                type="button"
+                onClick={() => setOperacionAbierta(abierta ? null : op.clave)}
+                className="w-full rounded-xl bg-white px-3 py-2 text-left text-sm ring-1 ring-sand"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <span className="font-medium capitalize text-ink">{op.tipo.toLowerCase()}</span>
+                    <p className="truncate text-xs text-taupe/70">
+                      {new Date(op.fecha + "T00:00:00").toLocaleDateString("es-CL")}
+                      {op.comentarios.length > 0 ? ` · ${op.comentarios[0]}` : ""}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 pl-2 ${op.total < 0 ? "text-orange-600" : "text-emerald-600"}`}>
+                    {formatoPesos(op.total)}
+                  </span>
                 </div>
-                <span className={h.monto < 0 ? "text-orange-600" : "text-emerald-600"}>{formatoPesos(h.monto)}</span>
-              </div>
+                {abierta && (
+                  <div className="mt-2 space-y-1 border-t border-sand/60 pt-2 text-xs">
+                    {op.comentarios.map((c) => (
+                      <p key={c} className="text-ink">
+                        {c}
+                      </p>
+                    ))}
+                    {op.filas.map((f) => (
+                      <div key={f.id} className="flex items-center justify-between text-taupe">
+                        <span>
+                          {participantes.find((p) => p.id === f.participante_id)?.nombre ?? "?"}
+                          {f.porcentaje_aplicado != null ? ` (${Math.round(f.porcentaje_aplicado * 100)}%)` : ""}
+                        </span>
+                        <span>{formatoPesos(f.monto)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </button>
             );
           })}
         </div>

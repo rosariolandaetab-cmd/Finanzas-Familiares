@@ -8,11 +8,14 @@ detalle completo.
 1. **Corre `02_actualizacion_inversion.sql` una vez en Supabase (SQL Editor)** si todavia no lo
    corriste: agrupa categorias de gasto, desactiva algunas, agrega la seccion Inversion y marca
    que categorias se pueden presupuestar. No borra ni modifica movimientos existentes.
-2. Copia `.env.example` a `.env.local` y completa las credenciales de tu proyecto Supabase
+2. **Corre `07_fondos_dinamicos_y_arrastre.sql` una vez en Supabase** (requiere el 06): permite
+   crear y eliminar fondos desde la app, y guarda desde que mes el saldo de cada mes pasa al
+   siguiente (por defecto septiembre 2026 partiendo en $0; se ajusta en la pestana Mes).
+3. Copia `.env.example` a `.env.local` y completa las credenciales de tu proyecto Supabase
    (`NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`). No subas `.env.local` al repositorio.
-3. Instala dependencias: `npm install`
-4. Levanta el servidor de desarrollo: `npm run dev`
-5. Abre `http://localhost:3000`
+4. Instala dependencias: `npm install`
+5. Levanta el servidor de desarrollo: `npm run dev`
+6. Abre `http://localhost:3000`
 
 La base de datos (esquema, categorias y movimientos) ya existe en Supabase — este proyecto solo la
 lee y escribe. Los cambios de estructura (como `02_actualizacion_inversion.sql`) se entregan como

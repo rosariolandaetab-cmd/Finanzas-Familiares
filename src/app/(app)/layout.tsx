@@ -47,14 +47,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider value={{ session, persona }}>
-      <div className="mx-auto flex max-w-md items-center justify-between px-4 pt-4 text-sm text-taupe/70">
-        <span>{persona?.nombre ?? session.user.email}</span>
-        <button onClick={() => supabase.auth.signOut()} className="underline">
-          Salir
-        </button>
-      </div>
-      <div className="pb-20">{children}</div>
-      <AppMenu />
+      <div className="pb-20 pt-2">{children}</div>
+      <AppMenu nombreUsuario={persona?.nombre ?? session.user.email ?? ""} />
     </AuthProvider>
   );
 }
