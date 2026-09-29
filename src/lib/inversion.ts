@@ -21,7 +21,6 @@ import type {
 
 const CODIGO_SUELDO_ROCHA = "IN-01";
 const CODIGO_SUELDO_LALO = "IN-02";
-const CODIGO_RETIRO_INVERSION = "TR-02";
 const VALOR_CUOTA_INICIAL = 1000;
 
 export const TIPOS_ACTIVO: { valor: TipoActivoInversion; etiqueta: string }[] = [
@@ -112,11 +111,6 @@ async function idCategoria(codigo: string): Promise<number | null> {
   return data?.id ?? null;
 }
 
-async function idCuentaCorriente(): Promise<number | null> {
-  const { data } = await supabase.from("cuentas").select("id").eq("tipo", "CORRIENTE").eq("activa", true).limit(1).maybeSingle();
-  return data?.id ?? null;
-}
-
 // reparte un monto exacto en pesos segun pesos relativos, sin perder pesos por redondeo
 function repartir(monto: number, pesos: { id: number; peso: number }[]): { id: number; monto: number }[] {
   const totalPeso = pesos.reduce((s, p) => s + p.peso, 0);
@@ -148,7 +142,8 @@ async function pesosPorSueldo(periodo: string, rochaId: number, laloId: number) 
 
 // Aporte desde Registrar (Transferencia -> Aporte a inversion). El movimiento
 // de la cuenta comun ya esta guardado; aqui se suma al activo elegido y se
-// compran cuotas para Rocha y Lalo segun los sueldos del mes.
+// compran cuotas: para Rocha y Lalo segun los sueldos del mes, o todo para un
+// solo participante si se indica (ej: Bajo Lalo).
 export async function registrarAporteInversion({
   movimientoId,
   activoId,
@@ -156,6 +151,7 @@ export async function registrarAporteInversion({
   fecha,
   comentario,
   creadoPor,
+  participanteId,
 }: {
   movimientoId: string;
   activoId: number;
@@ -163,13 +159,16 @@ export async function registrarAporteInversion({
   fecha: string;
   comentario: string | null;
   creadoPor: number | null;
+  participanteId?: number | null;
 }): Promise<{ error: string | null }> {
   const portafolio = await obtenerPortafolio();
   const rocha = portafolio.participantes.find((p) => p.nombre === "Rocha");
   const lalo = portafolio.participantes.find((p) => p.nombre === "Lalo");
   if (!rocha || !lalo) return { error: "No encontre a Rocha y Lalo en la inversion." };
 
-  const { pesos, porSueldo } = await pesosPorSueldo(fecha.slice(0, 7), rocha.id, lalo.id);
+  const { pesos, porSueldo } = participanteId
+    ? { pesos: [{ id: participanteId, peso: 1 }], porSueldo: true }
+    : await pesosPorSueldo(fecha.slice(0, 7), rocha.id, lalo.id);
   const operacionId = crypto.randomUUID();
   const nota = [comentario, porSueldo ? null : "Reparto 50/50 (sin sueldos registrados ese mes)"].filter(Boolean).join(" · ") || null;
 
@@ -198,65 +197,54 @@ export async function registrarAporteInversion({
   return { error: null };
 }
 
-// Retiro hacia la cuenta comun: crea la transferencia "Retiro de inversion",
-// baja el valor del activo y vende cuotas de cada uno segun su % del total.
+// Retiro: la plata sale del portafolio (baja el valor del activo y se venden
+// cuotas de quienes retiran, segun su % entre ellos). NO entra a la cuenta
+// comun: si esa plata se usa en la caja del mes, se anota aparte como ingreso
+// en Registrar. Para mover plata a otra inversion se usa Traspasar.
 export async function registrarRetiroInversion({
   activoId,
   monto,
   fecha,
   comentario,
   creadoPor,
+  participantesIds,
 }: {
   activoId: number;
   monto: number;
   fecha: string;
   comentario: string | null;
   creadoPor: number | null;
+  participantesIds: number[];
 }): Promise<{ error: string | null }> {
   const portafolio = await obtenerPortafolio();
   const activo = portafolio.activos.find((a) => a.id === activoId);
   if (!activo) return { error: "No encontre ese activo." };
   if (monto > activo.valor) return { error: `${activo.nombre} tiene solo $${activo.valor.toLocaleString("es-CL")}.` };
-  const conCuotas = portafolio.participantes.filter((p) => p.cuotas > 0);
-  if (conCuotas.length === 0) return { error: "Nadie tiene cuotas en la inversion." };
-
-  const [categoriaId, cuentaId] = await Promise.all([idCategoria(CODIGO_RETIRO_INVERSION), idCuentaCorriente()]);
-  if (!categoriaId || !cuentaId) return { error: "Falta configuracion en Supabase (categoria o cuenta corriente)." };
-
-  const { data: movimiento, error: errorMov } = await supabase
-    .from("movimientos")
-    .insert({
-      fecha_compra: fecha,
-      fecha_caja: fecha,
-      categoria_id: categoriaId,
-      monto,
-      cuenta_id: cuentaId,
-      estado: "PAGADO",
-      comentario,
-      origen: "MANUAL",
-      creado_por: creadoPor,
-    })
-    .select("id")
-    .single();
-  if (errorMov || !movimiento) return { error: "No se pudo guardar el retiro." };
-  await supabase.from("movimientos").update({ recurrencia: "TRANSFERENCIA" }).eq("id", movimiento.id);
+  const quienes = portafolio.participantes.filter((p) => participantesIds.includes(p.id) && p.cuotas > 0);
+  if (quienes.length === 0) return { error: "Los elegidos no tienen cuotas en la inversion." };
+  const disponible = quienes.reduce((s, p) => s + p.valor, 0);
+  if (monto > disponible) return { error: `Entre los elegidos tienen solo $${disponible.toLocaleString("es-CL")}.` };
 
   const operacionId = crypto.randomUUID();
-  await supabase.from("inversion_activo_movs").insert({
+  const reparto = repartir(
+    monto,
+    quienes.map((p) => ({ id: p.id, peso: p.cuotas }))
+  );
+  const detalle = reparto
+    .map((r) => `${quienes.find((p) => p.id === r.id)?.nombre} $${r.monto.toLocaleString("es-CL")}`)
+    .join(", ");
+  const { error } = await supabase.from("inversion_activo_movs").insert({
     operacion_id: operacionId,
     fecha,
     activo_id: activoId,
     tipo: "RETIRO",
     monto: -monto,
-    movimiento_id: movimiento.id,
-    comentario,
+    comentario: [comentario, detalle].filter(Boolean).join(" · "),
     creado_por: creadoPor,
   });
+  if (error) return { error: "No se pudo guardar el retiro." };
   await supabase.from("inversion_cuotas").insert(
-    repartir(
-      monto,
-      conCuotas.map((p) => ({ id: p.id, peso: p.cuotas }))
-    ).map((r) => ({
+    reparto.map((r) => ({
       operacion_id: operacionId,
       fecha,
       participante_id: r.id,

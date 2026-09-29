@@ -24,6 +24,7 @@ type Accion = "VALOR" | "TRASPASO" | "RETIRO" | "NUEVO" | null;
 const COLORES_PARTICIPANTE: Record<string, string> = {
   Rocha: "#B5602F",
   Lalo: "#7C8A5E",
+  "Bajo Lalo": "#8A7A63",
 };
 
 const ETIQUETA_TIPO_MOV: Record<TipoMovActivo, string> = {
@@ -55,6 +56,7 @@ export function InversionTab() {
   const [accion, setAccion] = useState<Accion>(null);
   const [activoId, setActivoId] = useState<number | null>(null);
   const [destinoId, setDestinoId] = useState<number | null>(null);
+  const [retiranIds, setRetiranIds] = useState<number[]>([]);
   const [monto, setMonto] = useState("");
   const [fecha, setFecha] = useState(hoyISO());
   const [comentario, setComentario] = useState("");
@@ -167,6 +169,10 @@ export function InversionTab() {
     setAccion(a);
     setActivoId(activo?.id ?? (activosVigentes.length === 1 ? activosVigentes[0].id : null));
     setDestinoId(null);
+    // por defecto retiran Rocha y Lalo (Bajo Lalo solo si se elige)
+    setRetiranIds(
+      (portafolio?.participantes ?? []).filter((p) => p.nombre === "Rocha" || p.nombre === "Lalo").map((p) => p.id)
+    );
     setMonto(a === "VALOR" && activo ? String(activo.valor) : "");
     setFecha(hoyISO());
     setComentario("");
@@ -193,7 +199,14 @@ export function InversionTab() {
       ({ error } = await registrarTraspaso({ origenId: activoId, destinoId, monto: montoNumero, fecha, comentario: nota, creadoPor }));
       exito = "Traspaso registrado ✓";
     } else if (accion === "RETIRO" && activoId) {
-      ({ error } = await registrarRetiroInversion({ activoId, monto: montoNumero, fecha, comentario: nota, creadoPor }));
+      ({ error } = await registrarRetiroInversion({
+        activoId,
+        monto: montoNumero,
+        fecha,
+        comentario: nota,
+        creadoPor,
+        participantesIds: retiranIds,
+      }));
       exito = "Retiro registrado ✓";
     }
 
@@ -218,7 +231,7 @@ export function InversionTab() {
   }
 
   async function deshacer(operacionId: string) {
-    if (!confirm("¿Deshacer esta operacion? Si vino de Registrar, tambien se borra ese movimiento.")) return;
+    if (!confirm("¿Deshacer esta operacion? Si fue un aporte desde Registrar, tambien se borra ese movimiento.")) return;
     await deshacerOperacion(operacionId);
     avisar("Operacion deshecha ✓");
     cargar();
@@ -232,7 +245,11 @@ export function InversionTab() {
     !guardando &&
     (accion === "NUEVO"
       ? !!nombreNuevo.trim()
-      : !!activoId && monto !== "" && (accion === "VALOR" || Number(monto) > 0) && (accion !== "TRASPASO" || !!destinoId));
+      : !!activoId &&
+        monto !== "" &&
+        (accion === "VALOR" || Number(monto) > 0) &&
+        (accion !== "TRASPASO" || !!destinoId) &&
+        (accion !== "RETIRO" || retiranIds.length > 0));
 
   return (
     <div className="space-y-6">
@@ -261,8 +278,9 @@ export function InversionTab() {
           ))}
         </div>
         <p className="mt-1 text-[11px] text-taupe/70">
-          Todo es una bolsa comun. Cada aporte compra cuotas segun los sueldos del mes; las ganancias suben el valor de
-          la cuota (hoy {formatoPesos(portafolio.valorCuota)}).
+          Todo es una bolsa comun. Cada aporte compra cuotas (Rocha y Lalo segun los sueldos del mes, o para quien se
+          elija); las ganancias suben el valor de la cuota (hoy {formatoPesos(portafolio.valorCuota)}), asi que a cada
+          uno le toca segun lo que tiene.
         </p>
       </div>
 
@@ -344,7 +362,7 @@ export function InversionTab() {
               ? "¿Cuanto vale hoy?"
               : accion === "TRASPASO"
               ? "Mover plata entre inversiones"
-              : "Retirar a la cuenta comun"}
+              : "Retirar de la inversion"}
           </p>
 
           {accion === "NUEVO" ? (
@@ -425,9 +443,33 @@ export function InversionTab() {
                 </p>
               )}
               {accion === "RETIRO" && (
-                <p className="text-[11px] text-taupe/70">
-                  Entra a la cuenta comun como Retiro de inversion y se descuenta a Rocha y Lalo segun su %.
-                </p>
+                <div>
+                  <p className="mb-1 text-xs text-taupe">¿De quien sale?</p>
+                  <div className="flex flex-wrap gap-2">
+                    {portafolio.participantes.map((p) => {
+                      const elegido = retiranIds.includes(p.id);
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() =>
+                            setRetiranIds((prev) => (elegido ? prev.filter((id) => id !== p.id) : [...prev, p.id]))
+                          }
+                          className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                            elegido ? "bg-clay text-white" : "bg-cream text-ink/70"
+                          }`}
+                        >
+                          {p.nombre}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1 text-[11px] text-taupe/70">
+                    Si son varios, se reparte segun lo que tiene cada uno. La plata sale de la inversion pero no entra a
+                    la caja del mes: si la vas a usar, anotala como ingreso en Registrar. Para moverla a otra inversion
+                    usa Traspasar.
+                  </p>
+                </div>
               )}
               <input
                 type="text"

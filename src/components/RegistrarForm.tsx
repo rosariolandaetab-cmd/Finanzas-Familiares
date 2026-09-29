@@ -39,6 +39,9 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   const [comentario, setComentario] = useState("");
   const [activosInversion, setActivosInversion] = useState<{ id: number; nombre: string }[]>([]);
   const [activoId, setActivoId] = useState<number | null>(null);
+  const [participantesInversion, setParticipantesInversion] = useState<{ id: number; nombre: string }[]>([]);
+  // null = Rocha y Lalo segun sueldos; si no, todo el aporte es de ese participante
+  const [aporteParaId, setAporteParaId] = useState<number | null>(null);
 
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -51,6 +54,12 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
         supabase.from("cuentas").select("*").eq("activa", true),
         supabase.from("inversion_activos").select("id, nombre").eq("activo", true).order("id"),
       ]);
+      const { data: parts } = await supabase
+        .from("inversion_participantes")
+        .select("id, nombre")
+        .eq("activo", true)
+        .order("id");
+      setParticipantesInversion((parts ?? []).filter((p) => p.nombre !== "Rocha" && p.nombre !== "Lalo"));
       setActivosInversion(activos ?? []);
       if ((activos ?? []).length === 1) setActivoId(activos![0].id);
       if (errCats || errCts) {
@@ -152,6 +161,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     setFecha(hoyISO());
     setComentario("");
     if (activosInversion.length !== 1) setActivoId(null);
+    setAporteParaId(null);
   }
 
   async function guardar() {
@@ -201,6 +211,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
         fecha,
         comentario: mov.comentario,
         creadoPor: persona?.id ?? null,
+        participanteId: aporteParaId,
       });
     }
     if (categoriaElegida?.grupo === "Fondos" && insertado) {
@@ -356,7 +367,26 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
               ))}
             </div>
           )}
-          <p className="mt-1 text-xs text-taupe/70">Se reparte entre Rocha y Lalo segun los sueldos del mes.</p>
+          {participantesInversion.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="w-full text-xs text-taupe">¿Para quien?</span>
+              {[{ id: null as number | null, nombre: "Rocha y Lalo" }, ...participantesInversion].map((p) => (
+                <button
+                  key={p.id ?? "rocha-lalo"}
+                  type="button"
+                  onClick={() => setAporteParaId(p.id)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                    aporteParaId === p.id ? "bg-clay text-white" : "bg-white ring-1 ring-inset ring-sand"
+                  }`}
+                >
+                  {p.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="mt-1 text-xs text-taupe/70">
+            {aporteParaId ? "Todo el aporte queda para ese bolsillo." : "Se reparte entre Rocha y Lalo segun los sueldos del mes."}
+          </p>
         </div>
       )}
 

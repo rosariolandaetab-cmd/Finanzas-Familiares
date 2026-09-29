@@ -15,11 +15,13 @@ detalle completo.
    de activos con cuotas para Rocha y Lalo, y pasa "Bajo Lalo" a Fondos.
 4. **Corre `09_cuentas_personales.sql`** (Rocha tiene que haber entrado a la app antes): crea las
    cuentas personales de Rocha, visibles solo para ella.
-5. Copia `.env.example` a `.env.local` y completa las credenciales de tu proyecto Supabase
+5. **Corre `10_correccion_terreno_y_bajo_lalo.sql`**: pasa el retiro de 30M al terreno de Puerto
+   Varas y devuelve "Bajo Lalo" a la inversion.
+6. Copia `.env.example` a `.env.local` y completa las credenciales de tu proyecto Supabase
    (`NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`). No subas `.env.local` al repositorio.
-6. Instala dependencias: `npm install`
-7. Levanta el servidor de desarrollo: `npm run dev`
-8. Abre `http://localhost:3000`
+7. Instala dependencias: `npm install`
+8. Levanta el servidor de desarrollo: `npm run dev`
+9. Abre `http://localhost:3000`
 
 La base de datos (esquema, categorias y movimientos) ya existe en Supabase — este proyecto solo la
 lee y escribe. Los cambios de estructura (como `02_actualizacion_inversion.sql`) se entregan como
@@ -37,7 +39,9 @@ una bolsa comun de Rocha y Lalo llevada con cuotas (como un fondo mutuo):
 - Actualizar valor: registra lo que dice la cartola o tasacion; la diferencia es ganancia o
   perdida y sube o baja el valor de la cuota.
 - Traspasos entre activos: no cambian el total ni las cuotas.
-- Retiros a la cuenta comun: venden cuotas de cada uno segun su %.
+- Retiros: la plata sale del portafolio (se venden cuotas de quienes retiran) pero NO entra a la
+  caja del mes. Si se usa en la caja, se anota aparte como ingreso en Registrar.
+- "Bajo Lalo" es un bolsillo dentro del portafolio: tiene sus cuotas y gana igual que el resto.
 
 **Fondos** (Vacaciones, Casa, Bajo Lalo...) se crean y eliminan desde la app.
 
