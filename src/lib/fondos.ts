@@ -154,11 +154,41 @@ export async function eliminarFondo(fondo: VFondoSaldo): Promise<{ error: string
   return { error: null };
 }
 
+// Plata que sale de la inversion directo a un fondo: no pasa por la caja,
+// asi que no tiene movimiento en la cuenta comun.
+export async function aportarFondoDesdeInversion({
+  fondoId,
+  monto,
+  fecha,
+  comentario,
+  creadoPor,
+}: {
+  fondoId: number;
+  monto: number;
+  fecha: string;
+  comentario: string | null;
+  creadoPor: number | null;
+}) {
+  const fila: MovimientoFondoInsert = {
+    fecha,
+    tipo: "APORTE",
+    fondo_id: fondoId,
+    monto,
+    movimiento_id: null,
+    comentario,
+    creado_por: creadoPor,
+  };
+  await supabase.from("fondos_movimientos").insert(fila);
+}
+
+// solo los aportes que salieron de la caja (los que vienen de la inversion
+// no son ahorro nuevo del mes)
 export async function aportesFondosPeriodo(periodo: string): Promise<number> {
   const { data } = await supabase
     .from("fondos_movimientos")
     .select("monto")
     .eq("tipo", "APORTE")
+    .not("movimiento_id", "is", null)
     .gte("fecha", `${periodo}-01`)
     .lt("fecha", `${sumarMesesAPeriodo(periodo, 1)}-01`);
   return (data ?? []).reduce((a, m) => a + m.monto, 0);
