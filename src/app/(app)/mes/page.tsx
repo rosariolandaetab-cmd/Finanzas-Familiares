@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { formatoPesos, periodoActual } from "@/lib/formato";
+import { etiquetaPeriodo, formatoPesos, periodoActual, sumarMesesAPeriodo } from "@/lib/formato";
+import { arrastreDelMes, guardarConfigArrastre, obtenerConfigArrastre, type ArrastreMes, type ConfigArrastre } from "@/lib/arrastre";
 import { CLASES_SEMAFORO, colorSemaforo } from "@/lib/semaforo";
 import { aportesInversionPeriodo } from "@/lib/inversion";
 import { aportesFondosPeriodo } from "@/lib/fondos";
@@ -44,6 +46,10 @@ export default function MesPage() {
   const [categoriaAbierta, setCategoriaAbierta] = useState<string | null>(null);
   const [ahorroFondosEInversion, setAhorroFondosEInversion] = useState(0);
   const [mostrarInfoFijos, setMostrarInfoFijos] = useState(false);
+  const [configArrastre, setConfigArrastre] = useState<ConfigArrastre | null>(null);
+  const [arrastre, setArrastre] = useState<ArrastreMes | null>(null);
+  const [editandoArrastre, setEditandoArrastre] = useState(false);
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     let cancelado = false;
@@ -57,6 +63,7 @@ export default function MesPage() {
         { data: movsGasto },
         aportesFondos,
         aportesInversion,
+        config,
       ] = await Promise.all([
         supabase.from("v_resumen_mensual").select("*").eq("periodo", periodo).maybeSingle(),
         supabase.from("v_presupuesto_mes").select("*").eq("periodo", periodo),
@@ -70,8 +77,12 @@ export default function MesPage() {
           .order("fecha_compra", { ascending: false }),
         aportesFondosPeriodo(periodo),
         aportesInversionPeriodo(periodo),
+        obtenerConfigArrastre(),
       ]);
+      const arrastreMes = await arrastreDelMes(periodo, config);
       if (cancelado) return;
+      setConfigArrastre(config);
+      setArrastre(arrastreMes);
       setResumen(resumenData ?? null);
       setPresupuestoMes(presupuestoData ?? []);
       setDeudas(deudaData ?? []);
@@ -85,7 +96,7 @@ export default function MesPage() {
     return () => {
       cancelado = true;
     };
-  }, [periodo]);
+  }, [periodo, recarga]);
 
   const indicadores = useMemo(() => {
     const r = resumen ?? {
@@ -105,18 +116,31 @@ export default function MesPage() {
     return { ...r, ingresoTotal, resultado, tasaAhorro, fijosDeudasSobreIngreso };
   }, [resumen, ahorroFondosEInversion]);
 
-  const pasosCascada = useMemo(
-    () => [
+  const pasosCascada = useMemo(() => {
+    const flujoDelMes = [
       { nombre: "Ingreso recurrente", delta: indicadores.ingreso_recurrente, tipo: "ingreso" as const },
       { nombre: "Extraordinario", delta: indicadores.ingreso_extraordinario, tipo: "ingreso" as const },
       { nombre: "Fijos", delta: -indicadores.fijos, tipo: "salida" as const },
       { nombre: "Deudas", delta: -indicadores.deudas, tipo: "salida" as const },
       { nombre: "Asignacion personal", delta: -indicadores.asignacion_personal, tipo: "salida" as const },
       { nombre: "Variables", delta: -indicadores.variables, tipo: "salida" as const },
-      { nombre: "Resultado", delta: indicadores.resultado, tipo: "resultado" as const },
-    ],
-    [indicadores]
-  );
+    ];
+    if (!arrastre) {
+      return [...flujoDelMes, { nombre: "Resultado", delta: indicadores.resultado, tipo: "resultado" as const }];
+    }
+    // con arrastre: parte con lo que quedo del mes anterior y termina en lo
+    // que pasa al siguiente, descontando lo guardado en fondos/inversion
+    return [
+      {
+        nombre: "Mes anterior",
+        delta: arrastre.saldoAnterior,
+        tipo: arrastre.saldoAnterior >= 0 ? ("ingreso" as const) : ("salida" as const),
+      },
+      ...flujoDelMes,
+      { nombre: "Fondos e inversion", delta: -arrastre.flujo.ahorroNeto, tipo: "salida" as const },
+      { nombre: "Saldo final", delta: arrastre.saldoFinal, tipo: "resultado" as const },
+    ];
+  }, [indicadores, arrastre]);
 
   const nivelFijos = nivelFijosDeudas(indicadores.fijosDeudasSobreIngreso);
 
@@ -135,14 +159,20 @@ export default function MesPage() {
             {deudas.map((d) => {
               const cuenta = tarjetas.find((t) => t.nombre === d.tarjeta);
               const vence = proximoVencimiento(cuenta?.dia_vencimiento ?? null);
+              const href = `/historial?estado=PENDIENTE${cuenta ? `&cuenta=${cuenta.id}` : ""}`;
               return (
-                <div key={d.tarjeta} className="flex items-center justify-between">
-                  <span className="text-sm">{d.tarjeta}</span>
+                <Link key={d.tarjeta} href={href} className="flex items-center justify-between">
+                  <span className="text-sm">
+                    {d.tarjeta}
+                    <span className="block text-[11px] text-taupe/70">
+                      {d.compras} compra{d.compras === 1 ? "" : "s"} pendiente{d.compras === 1 ? "" : "s"} · ver detalle ›
+                    </span>
+                  </span>
                   <div className="text-right">
                     <div className="text-lg font-semibold">{formatoPesos(d.total_pendiente)}</div>
                     {vence && <div className="text-[11px] text-taupe/70">vence el {vence}</div>}
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -174,6 +204,18 @@ export default function MesPage() {
           </div>
         </button>
       </div>
+
+      <TarjetaArrastre
+        periodo={periodo}
+        arrastre={arrastre}
+        config={configArrastre}
+        editando={editandoArrastre}
+        onEditar={setEditandoArrastre}
+        onGuardado={() => {
+          setEditandoArrastre(false);
+          setRecarga((n) => n + 1);
+        }}
+      />
 
       {mostrarInfoFijos && (
         <div className="rounded-2xl bg-white p-4 text-sm ring-1 ring-sand">
@@ -278,6 +320,125 @@ function Indicador({
     <div className="rounded-2xl bg-white p-3 ring-1 ring-sand">
       <p className="text-[11px] text-taupe">{etiqueta}</p>
       <p className={`mt-1 text-lg font-semibold ${negativo ? "text-red-600" : "text-ink"}`}>{valor}</p>
+    </div>
+  );
+}
+
+function TarjetaArrastre({
+  periodo,
+  arrastre,
+  config,
+  editando,
+  onEditar,
+  onGuardado,
+}: {
+  periodo: string;
+  arrastre: ArrastreMes | null;
+  config: ConfigArrastre | null;
+  editando: boolean;
+  onEditar: (v: boolean) => void;
+  onGuardado: () => void;
+}) {
+  const [desde, setDesde] = useState(config?.desde ?? periodo);
+  const [saldoTexto, setSaldoTexto] = useState(String(config?.saldoInicial ?? 0));
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    if (editando) {
+      setDesde(config?.desde ?? periodo);
+      setSaldoTexto(String(config?.saldoInicial ?? 0));
+    }
+  }, [editando, config, periodo]);
+
+  async function guardar() {
+    setGuardando(true);
+    await guardarConfigArrastre({ desde, saldoInicial: Number(saldoTexto.replace(/[^0-9-]/g, "") || "0") });
+    setGuardando(false);
+    onGuardado();
+  }
+
+  if (editando) {
+    return (
+      <div className="space-y-2 rounded-2xl bg-white p-4 text-sm ring-2 ring-clay">
+        <p className="font-medium text-ink">Saldo que pasa de un mes a otro</p>
+        <p className="text-xs text-taupe">
+          Elige el primer mes que recibe saldo y con cuanto parte (lo que quedo disponible al cerrar el mes anterior).
+          Desde ahi, lo que sobre o falte de cada mes pasa solo al siguiente.
+        </p>
+        <label className="block text-xs text-taupe">
+          Primer mes
+          <input
+            type="month"
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-sand px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block text-xs text-taupe">
+          Parte con (usa - si parte en negativo)
+          <input
+            type="text"
+            inputMode="numeric"
+            value={saldoTexto}
+            onChange={(e) => setSaldoTexto(e.target.value.replace(/[^0-9-]/g, ""))}
+            className="mt-1 w-full rounded-xl border border-sand px-3 py-2 text-sm"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={guardar}
+            disabled={guardando || !desde}
+            className="flex-1 rounded-xl bg-clay py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {guardando ? "Guardando..." : "Guardar"}
+          </button>
+          <button type="button" onClick={() => onEditar(false)} className="rounded-xl bg-cream px-3 py-2 text-sm">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <p className="rounded-2xl bg-amber-50 p-3 text-xs text-amber-800">
+        Para que el saldo de cada mes pase al siguiente, corre el script 07_fondos_dinamicos_y_arrastre.sql en Supabase.
+      </p>
+    );
+  }
+
+  if (!arrastre) {
+    return (
+      <button type="button" onClick={() => onEditar(true)} className="w-full text-left text-xs text-taupe/70 underline">
+        El saldo entre meses se cuenta desde {etiquetaPeriodo(config.desde)}. Cambiar
+      </button>
+    );
+  }
+
+  const siguiente = etiquetaPeriodo(sumarMesesAPeriodo(periodo, 1));
+  return (
+    <div className="rounded-2xl bg-white p-3 text-sm ring-1 ring-sand">
+      <div className="flex items-center justify-between">
+        <span className="text-taupe">Viene del mes anterior</span>
+        <span className={`font-semibold ${arrastre.saldoAnterior < 0 ? "text-red-600" : "text-ink"}`}>
+          {formatoPesos(arrastre.saldoAnterior)}
+        </span>
+      </div>
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-taupe">Guardado en fondos e inversion</span>
+        <span className="text-ink">{formatoPesos(arrastre.flujo.ahorroNeto)}</span>
+      </div>
+      <div className="mt-2 flex items-center justify-between border-t border-sand/60 pt-2">
+        <span className="font-medium text-ink">Pasa a {siguiente}</span>
+        <span className={`text-base font-semibold ${arrastre.saldoFinal < 0 ? "text-red-600" : "text-emerald-700"}`}>
+          {formatoPesos(arrastre.saldoFinal)}
+        </span>
+      </div>
+      <button type="button" onClick={() => onEditar(true)} className="mt-2 text-[11px] text-taupe/70 underline">
+        Ajustar desde cuando se cuenta
+      </button>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { formatoPesos, periodoActual } from "@/lib/formato";
 import { SelectorPeriodo } from "@/components/SelectorPeriodo";
@@ -18,12 +19,28 @@ function etiquetaCuenta(c: Cuenta) {
 }
 
 export default function HistorialPage() {
-  const [todosLosMeses, setTodosLosMeses] = useState(false);
+  // useSearchParams necesita un Suspense alrededor para poder compilar la pagina
+  return (
+    <Suspense fallback={<p className="py-8 text-center text-taupe/70">Cargando...</p>}>
+      <Historial />
+    </Suspense>
+  );
+}
+
+function Historial() {
+  // se puede abrir ya filtrado, por ejemplo desde la deuda de tarjeta en Mes:
+  // /historial?estado=PENDIENTE&cuenta=2 (pendientes se ven de todos los meses)
+  const params = useSearchParams();
+  const estadoInicial = params.get("estado") === "PENDIENTE" || params.get("estado") === "PAGADO" ? (params.get("estado") as EstadoMov) : "";
+  const cuentaInicial = params.get("cuenta") ? Number(params.get("cuenta")) : "";
+
+  const [todosLosMeses, setTodosLosMeses] = useState(estadoInicial === "PENDIENTE");
   const [periodo, setPeriodo] = useState(periodoActual());
   const [tipoFlujo, setTipoFlujo] = useState<TipoFlujo | "">("");
   const [categoriaId, setCategoriaId] = useState<number | "">("");
   const [personaId, setPersonaId] = useState<number | "">("");
-  const [estado, setEstado] = useState<EstadoMov | "">("");
+  const [estado, setEstado] = useState<EstadoMov | "">(estadoInicial);
+  const [cuentaFiltro, setCuentaFiltro] = useState<number | "">(cuentaInicial);
 
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -64,10 +81,14 @@ export default function HistorialPage() {
     if (categoriaId !== "") query = query.eq("categoria_id", categoriaId);
     if (personaId !== "") query = query.eq("persona_id", personaId);
     if (estado !== "") query = query.eq("estado", estado);
+    if (cuentaFiltro !== "") query = query.eq("cuenta_id", cuentaFiltro);
     const { data } = await query.limit(200);
     setMovimientos(data ?? []);
     setCargando(false);
-  }, [todosLosMeses, periodo, tipoFlujo, categoriaId, personaId, estado]);
+  }, [todosLosMeses, periodo, tipoFlujo, categoriaId, personaId, estado, cuentaFiltro]);
+
+  const hayFiltros = tipoFlujo !== "" || categoriaId !== "" || personaId !== "" || estado !== "" || cuentaFiltro !== "";
+  const totalFiltrado = movimientos.reduce((a, m) => a + m.monto, 0);
 
   useEffect(() => {
     cargarMovimientos();
@@ -201,13 +222,34 @@ export default function HistorialPage() {
         <select
           value={estado}
           onChange={(e) => setEstado(e.target.value as EstadoMov | "")}
-          className="col-span-2 rounded-xl border border-sand px-2 py-2 text-sm"
+          className="rounded-xl border border-sand px-2 py-2 text-sm"
         >
           <option value="">Todo estado</option>
           <option value="PAGADO">Pagado</option>
           <option value="PENDIENTE">Pendiente</option>
         </select>
+        <select
+          value={cuentaFiltro}
+          onChange={(e) => setCuentaFiltro(e.target.value ? Number(e.target.value) : "")}
+          className="rounded-xl border border-sand px-2 py-2 text-sm"
+        >
+          <option value="">Todo medio de pago</option>
+          {cuentas.map((c) => (
+            <option key={c.id} value={c.id}>
+              {etiquetaCuenta(c)}
+            </option>
+          ))}
+        </select>
       </div>
+
+      {hayFiltros && !cargando && movimientos.length > 0 && (
+        <div className="flex items-center justify-between rounded-2xl bg-ink px-4 py-2 text-sm text-white">
+          <span>
+            {movimientos.length} movimiento{movimientos.length === 1 ? "" : "s"}
+          </span>
+          <span className="font-semibold">{formatoPesos(totalFiltrado)}</span>
+        </div>
+      )}
 
       {cargando ? (
         <p className="py-8 text-center text-taupe/70">Cargando...</p>

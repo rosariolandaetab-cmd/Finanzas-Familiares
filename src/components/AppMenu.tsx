@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
+import { tieneCuentasPersonales } from "@/lib/personal";
 
 const ITEMS = [
   { href: "/", etiqueta: "Registrar" },
@@ -13,15 +15,31 @@ const ITEMS = [
   { href: "/inversion", etiqueta: "Inversion" },
 ];
 
-export function AppMenu() {
+const ITEMS_PERSONALES = [
+  { href: "/personal", etiqueta: "Registrar" },
+  { href: "/personal/mes", etiqueta: "Mes" },
+  { href: "/personal/historial", etiqueta: "Historial" },
+];
+
+function esActivo(href: string, pathname: string) {
+  if (href === "/" || href === "/personal") return pathname === href;
+  return pathname.startsWith(href);
+}
+
+export function AppMenu({ nombreUsuario }: { nombreUsuario: string }) {
   const pathname = usePathname();
   const [abierto, setAbierto] = useState(false);
+  const [conCuentasPersonales, setConCuentasPersonales] = useState(false);
+
+  useEffect(() => {
+    tieneCuentasPersonales().then(setConCuentasPersonales);
+  }, []);
 
   useEffect(() => {
     setAbierto(false);
   }, [pathname]);
 
-  const actual = ITEMS.find((item) => (item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)));
+  const enPersonal = pathname.startsWith("/personal");
 
   return (
     <>
@@ -55,24 +73,60 @@ export function AppMenu() {
             </button>
           </div>
 
-          <div className="mx-auto grid w-full max-w-md flex-1 grid-cols-2 content-center gap-3 py-8">
-            {ITEMS.map((item) => {
-              const activo = item.href === actual?.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex aspect-square flex-col items-center justify-center rounded-2xl text-center text-base font-semibold ${
-                    activo ? "bg-clay text-white" : "bg-white text-ink"
-                  }`}
-                >
-                  {item.etiqueta}
-                </Link>
-              );
-            })}
+          <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 overflow-y-auto py-6">
+            <SeccionMenu
+              titulo={conCuentasPersonales ? "Familia" : null}
+              items={ITEMS}
+              pathname={enPersonal ? "" : pathname}
+            />
+            {conCuentasPersonales && (
+              <SeccionMenu titulo={nombreUsuario} items={ITEMS_PERSONALES} pathname={enPersonal ? pathname : ""} />
+            )}
+          </div>
+
+          <div className="mx-auto flex w-full max-w-md items-center justify-between text-sm text-white/60">
+            <span>{nombreUsuario}</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("¿Cerrar sesion?")) supabase.auth.signOut();
+              }}
+              className="underline"
+            >
+              Salir
+            </button>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function SeccionMenu({
+  titulo,
+  items,
+  pathname,
+}: {
+  titulo: string | null;
+  items: { href: string; etiqueta: string }[];
+  pathname: string;
+}) {
+  return (
+    <div>
+      {titulo && <p className="mb-2 text-xs font-medium uppercase tracking-wide text-white/50">{titulo}</p>}
+      <div className="grid grid-cols-3 gap-3">
+        {items.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`flex aspect-square flex-col items-center justify-center rounded-2xl text-center text-sm font-semibold ${
+              esActivo(item.href, pathname) ? "bg-clay text-white" : "bg-white text-ink"
+            }`}
+          >
+            {item.etiqueta}
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
