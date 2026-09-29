@@ -59,7 +59,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
         .select("id, nombre")
         .eq("activo", true)
         .order("id");
-      setParticipantesInversion((parts ?? []).filter((p) => p.nombre !== "Rocha" && p.nombre !== "Lalo"));
+      setParticipantesInversion(parts ?? []);
       setActivosInversion(activos ?? []);
       if ((activos ?? []).length === 1) setActivoId(activos![0].id);
       if (errCats || errCts) {
@@ -370,7 +370,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
           {participantesInversion.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               <span className="w-full text-xs text-taupe">¿Para quien?</span>
-              {[{ id: null as number | null, nombre: "Rocha y Lalo" }, ...participantesInversion].map((p) => (
+              {[{ id: null as number | null, nombre: "Rocha y Lalo (segun sueldos)" }, ...participantesInversion].map((p) => (
                 <button
                   key={p.id ?? "rocha-lalo"}
                   type="button"
@@ -385,7 +385,9 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
             </div>
           )}
           <p className="mt-1 text-xs text-taupe/70">
-            {aporteParaId ? "Todo el aporte queda para ese bolsillo." : "Se reparte entre Rocha y Lalo segun los sueldos del mes."}
+            {aporteParaId
+              ? `Todo el aporte queda para ${participantesInversion.find((p) => p.id === aporteParaId)?.nombre}.`
+              : "Se reparte entre Rocha y Lalo segun los sueldos del mes."}
           </p>
         </div>
       )}
