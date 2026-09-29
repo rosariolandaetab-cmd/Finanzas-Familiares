@@ -16,6 +16,7 @@ import {
   type Portafolio,
   type ResumenActivo,
 } from "@/lib/inversion";
+import { aportarFondoDesdeInversion, obtenerSaldosFondos } from "@/lib/fondos";
 import { EvolucionParticipantesChart, type PuntoParticipantes } from "@/components/EvolucionParticipantesChart";
 import type { MovActivoInversion, MovimientoInversion, TipoActivoInversion, TipoMovActivo } from "@/types/database";
 
@@ -57,6 +58,9 @@ export function InversionTab() {
   const [activoId, setActivoId] = useState<number | null>(null);
   const [destinoId, setDestinoId] = useState<number | null>(null);
   const [retiranIds, setRetiranIds] = useState<number[]>([]);
+  const [fondos, setFondos] = useState<{ id: number; nombre: string }[]>([]);
+  // a donde va un retiro: null = sale de la inversion (sin pasar a la caja), o un fondo
+  const [fondoDestinoId, setFondoDestinoId] = useState<number | null>(null);
   const [monto, setMonto] = useState("");
   const [fecha, setFecha] = useState(hoyISO());
   const [comentario, setComentario] = useState("");
@@ -70,11 +74,13 @@ export function InversionTab() {
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const [p, { data: anterior }, { data: todos }] = await Promise.all([
+    const [p, { data: anterior }, { data: todos }, listaFondos] = await Promise.all([
       obtenerPortafolio(),
       supabase.from("inversion_movimientos").select("*").order("fecha", { ascending: false }).limit(300),
       supabase.from("inversion_participantes").select("*"),
+      obtenerSaldosFondos(),
     ]);
+    setFondos(listaFondos.map((f) => ({ id: f.id, nombre: f.nombre })));
     setPortafolio(p);
     setHistorialAnterior(anterior ?? []);
     setNombresParticipantes(new Map((todos ?? []).map((x) => [x.id, x.nombre])));
@@ -169,6 +175,7 @@ export function InversionTab() {
     setAccion(a);
     setActivoId(activo?.id ?? (activosVigentes.length === 1 ? activosVigentes[0].id : null));
     setDestinoId(null);
+    setFondoDestinoId(null);
     // por defecto retiran Rocha y Lalo (Bajo Lalo solo si se elige)
     setRetiranIds(
       (portafolio?.participantes ?? []).filter((p) => p.nombre === "Rocha" || p.nombre === "Lalo").map((p) => p.id)
@@ -207,7 +214,17 @@ export function InversionTab() {
         creadoPor,
         participantesIds: retiranIds,
       }));
-      exito = "Retiro registrado ✓";
+      const fondo = fondos.find((f) => f.id === fondoDestinoId);
+      if (!error && fondo) {
+        await aportarFondoDesdeInversion({
+          fondoId: fondo.id,
+          monto: montoNumero,
+          fecha,
+          comentario: [`Desde la inversion (${nombreActivo(activoId)})`, nota].filter(Boolean).join(" · "),
+          creadoPor,
+        });
+      }
+      exito = fondo ? `Retiro pasado a ${fondo.nombre} ✓` : "Retiro registrado ✓";
     }
 
     setGuardando(false);
@@ -464,10 +481,27 @@ export function InversionTab() {
                       );
                     })}
                   </div>
+                  <p className="mt-1 text-[11px] text-taupe/70">Si son varios, se reparte segun lo que tiene cada uno.</p>
+                  <p className="mb-1 mt-3 text-xs text-taupe">¿A donde va?</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[{ id: null as number | null, nombre: "Sale de la inversion" }, ...fondos].map((f) => (
+                      <button
+                        key={f.id ?? "fuera"}
+                        type="button"
+                        onClick={() => setFondoDestinoId(f.id)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                          fondoDestinoId === f.id ? "bg-clay text-white" : "bg-cream text-ink/70"
+                        }`}
+                      >
+                        {f.id ? `Fondo ${f.nombre}` : f.nombre}
+                      </button>
+                    ))}
+                  </div>
                   <p className="mt-1 text-[11px] text-taupe/70">
-                    Si son varios, se reparte segun lo que tiene cada uno. La plata sale de la inversion pero no entra a
-                    la caja del mes: si la vas a usar, anotala como ingreso en Registrar. Para moverla a otra inversion
-                    usa Traspasar.
+                    {fondoDestinoId
+                      ? "Queda como aporte a ese fondo, sin pasar por la caja del mes."
+                      : "No entra a la caja del mes: si usas esa plata, anotala como ingreso en Registrar."}{" "}
+                    Para moverla a otra inversion usa Traspasar.
                   </p>
                 </div>
               )}

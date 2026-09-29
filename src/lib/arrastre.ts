@@ -4,17 +4,18 @@ import { sumarMesesAPeriodo } from "@/lib/formato";
 // Saldo que pasa de un mes al siguiente.
 //
 // Saldo final de un mes = saldo del mes anterior + ingresos - gastos
-//                         - lo que se guardo en fondos/inversion (neto de retiros).
+//                         - lo que se guardo en fondos/inversion (neto de retiros de fondos).
 // Pago de tarjeta, ajustes, garantias y ganancias de inversion no mueven
 // este saldo: son plata que no queda disponible para el mes, o que ya se
 // conto como gasto al comprar.
+// Un "Retiro de inversion" tampoco: la plata que sale de la inversion no
+// entra a la caja. Lo que se usa en el mes se anota aparte como ingreso.
 //
 // La cadena parte en el mes "arrastre_desde" (tabla configuracion) con
 // "arrastre_saldo_inicial": antes de ese mes no se arrastra nada, porque el
 // historial migrado no parte de un saldo conocido.
 
 const CODIGO_APORTE_INVERSION = "TR-01";
-const CODIGO_RETIRO_INVERSION = "TR-02";
 const CODIGO_RETIRO_FONDO = "TR-06";
 
 export type ConfigArrastre = { desde: string; saldoInicial: number };
@@ -60,7 +61,7 @@ async function flujosPorMes(desde: string, hasta: string): Promise<Map<string, F
   const signoAhorro = new Map<number, number>();
   for (const c of categoriasTr ?? []) {
     if (c.codigo === CODIGO_APORTE_INVERSION || c.grupo === "Fondos") signoAhorro.set(c.id, 1);
-    if (c.codigo === CODIGO_RETIRO_INVERSION || c.codigo === CODIGO_RETIRO_FONDO) signoAhorro.set(c.id, -1);
+    if (c.codigo === CODIGO_RETIRO_FONDO) signoAhorro.set(c.id, -1);
   }
 
   const flujos = new Map<string, FlujoMes>();
