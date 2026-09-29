@@ -220,6 +220,98 @@ export type VFondoSaldo = {
   saldo_actual: number;
 };
 
+export type TipoActivoInversion = "FONDO" | "DEPOSITO" | "ACCIONES" | "TERRENO" | "PROPIEDAD" | "PRESTAMO" | "OTRO";
+export type TipoMovActivo = "SALDO_INICIAL" | "APORTE" | "RETIRO" | "TRASPASO" | "VALOR";
+
+export type ActivoInversion = {
+  id: number;
+  nombre: string;
+  tipo: TipoActivoInversion;
+  comentario: string | null;
+  activo: boolean;
+  creado_en: string;
+};
+
+export type MovActivoInversion = {
+  id: string;
+  operacion_id: string;
+  fecha: string;
+  activo_id: number;
+  tipo: TipoMovActivo;
+  monto: number;
+  movimiento_id: string | null;
+  comentario: string | null;
+  creado_por: number | null;
+  creado_en: string;
+};
+
+export type MovActivoInversionInsert = Omit<MovActivoInversion, "id" | "creado_en" | "movimiento_id" | "comentario" | "creado_por"> & {
+  movimiento_id?: string | null;
+  comentario?: string | null;
+  creado_por?: number | null;
+};
+
+export type CuotaInversion = {
+  id: string;
+  operacion_id: string;
+  fecha: string;
+  participante_id: number;
+  cuotas: number;
+  valor_cuota: number;
+  monto: number;
+  creado_en: string;
+};
+
+export type TipoCuentaPersonal = "DEBITO" | "CREDITO" | "EFECTIVO";
+
+export type CuentaPersonal = {
+  id: number;
+  persona_id: number;
+  nombre: string;
+  tipo: TipoCuentaPersonal;
+  banco: string | null;
+  ultimos4: string | null;
+  dia_facturacion: number | null;
+  dia_vencimiento: number | null;
+  orden: number;
+  activa: boolean;
+};
+
+export type CategoriaPersonal = {
+  id: number;
+  persona_id: number;
+  tipo: "GASTO" | "INGRESO";
+  nombre: string;
+  orden: number;
+  activa: boolean;
+};
+
+export type MovimientoPersonal = {
+  id: string;
+  persona_id: number;
+  fecha: string;
+  categoria_id: number;
+  cuenta_id: number | null;
+  monto: number;
+  estado: EstadoMov;
+  fecha_pago: string | null;
+  comentario: string | null;
+  movimiento_familiar_id: string | null;
+  creado_en: string;
+  actualizado_en: string;
+};
+
+// persona_id lo pone la base de datos (mi_persona_id())
+export type MovimientoPersonalInsert = {
+  fecha: string;
+  categoria_id: number;
+  cuenta_id: number | null;
+  monto: number;
+  estado: EstadoMov;
+  fecha_pago: string | null;
+  comentario: string | null;
+};
+
 export type Configuracion = {
   clave: string;
   valor: string;
@@ -286,6 +378,42 @@ export type Database = {
         Row: MovimientoFondo;
         Insert: MovimientoFondoInsert;
         Update: Partial<MovimientoFondoInsert>;
+        Relationships: [];
+      };
+      inversion_activos: {
+        Row: ActivoInversion;
+        Insert: Partial<ActivoInversion> & { nombre: string };
+        Update: Partial<ActivoInversion>;
+        Relationships: [];
+      };
+      inversion_activo_movs: {
+        Row: MovActivoInversion;
+        Insert: MovActivoInversionInsert;
+        Update: Partial<MovActivoInversionInsert>;
+        Relationships: [];
+      };
+      inversion_cuotas: {
+        Row: CuotaInversion;
+        Insert: Omit<CuotaInversion, "id" | "creado_en">;
+        Update: Partial<Omit<CuotaInversion, "id" | "creado_en">>;
+        Relationships: [];
+      };
+      personal_cuentas: {
+        Row: CuentaPersonal;
+        Insert: Partial<CuentaPersonal>;
+        Update: Partial<CuentaPersonal>;
+        Relationships: [];
+      };
+      personal_categorias: {
+        Row: CategoriaPersonal;
+        Insert: Partial<CategoriaPersonal>;
+        Update: Partial<CategoriaPersonal>;
+        Relationships: [];
+      };
+      personal_movimientos: {
+        Row: MovimientoPersonal;
+        Insert: MovimientoPersonalInsert;
+        Update: Partial<MovimientoPersonalInsert> & { actualizado_en?: string };
         Relationships: [];
       };
       configuracion: {

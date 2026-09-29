@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { encolarMovimiento, sincronizarPendientes } from "@/lib/offlineQueue";
 import { hoyISO } from "@/lib/formato";
-import { repartirAporteInversion } from "@/lib/inversion";
+import { registrarAporteInversion } from "@/lib/inversion";
 import { fondoDeCategoria, registrarAporteFondo } from "@/lib/fondos";
 import type { Categoria, Cuenta, MovimientoInsert, Persona, TipoFlujo } from "@/types/database";
 
@@ -37,6 +37,8 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
   const [estadoCredito, setEstadoCredito] = useState<"PENDIENTE" | "PAGADO">("PENDIENTE");
   const [fecha, setFecha] = useState(hoyISO());
   const [comentario, setComentario] = useState("");
+  const [activosInversion, setActivosInversion] = useState<{ id: number; nombre: string }[]>([]);
+  const [activoId, setActivoId] = useState<number | null>(null);
 
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -44,10 +46,13 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
   useEffect(() => {
     async function cargar() {
-      const [{ data: cats, error: errCats }, { data: cts, error: errCts }] = await Promise.all([
+      const [{ data: cats, error: errCats }, { data: cts, error: errCts }, { data: activos }] = await Promise.all([
         supabase.from("categorias").select("*").eq("activa", true).order("orden", { ascending: true }),
         supabase.from("cuentas").select("*").eq("activa", true),
+        supabase.from("inversion_activos").select("id, nombre").eq("activo", true).order("id"),
       ]);
+      setActivosInversion(activos ?? []);
+      if ((activos ?? []).length === 1) setActivoId(activos![0].id);
       if (errCats || errCts) {
         setErrorCarga("No se pudieron cargar las categorias o cuentas. Revisa tu conexion.");
       } else {
@@ -125,8 +130,16 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
 
   const faltaElegirTarjeta = requiereMedioPago && medioPago === "CREDITO" && tarjetas.length > 1 && !tarjetaId;
 
+  const esAporteInversion = categorias.find((c) => c.id === categoriaId)?.codigo === CODIGO_APORTE_INVERSION;
+  const faltaElegirActivo = esAporteInversion && !activoId;
+
   const puedeGuardar =
-    montoNumero > 0 && categoriaId !== null && !!cuentaResuelta && !faltaElegirTarjeta && !guardando;
+    montoNumero > 0 &&
+    categoriaId !== null &&
+    !!cuentaResuelta &&
+    !faltaElegirTarjeta &&
+    !faltaElegirActivo &&
+    !guardando;
 
   function limpiarFormulario() {
     setTipo("GASTO");
@@ -138,6 +151,7 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     setEstadoCredito("PENDIENTE");
     setFecha(hoyISO());
     setComentario("");
+    if (activosInversion.length !== 1) setActivoId(null);
   }
 
   async function guardar() {
@@ -179,10 +193,10 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
     }
 
     const categoriaElegida = categorias.find((c) => c.id === categoriaId);
-    if (categoriaElegida?.codigo === CODIGO_APORTE_INVERSION && insertado) {
-      await repartirAporteInversion({
+    if (categoriaElegida?.codigo === CODIGO_APORTE_INVERSION && insertado && activoId) {
+      await registrarAporteInversion({
         movimientoId: insertado.id,
-        periodo: fecha.slice(0, 7),
+        activoId,
         monto: montoNumero,
         fecha,
         comentario: mov.comentario,
@@ -318,6 +332,33 @@ export function RegistrarForm({ persona }: { persona: Persona | null }) {
           ))}
         </div>
       </div>
+
+      {esAporteInversion && (
+        <div>
+          <label className="mb-2 block text-sm font-medium text-taupe">¿A que inversion?</label>
+          {activosInversion.length === 0 ? (
+            <p className="text-sm text-amber-700">
+              No hay inversiones creadas. Crea una en la pestana Inversion (o corre 08_portafolio_inversion.sql).
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {activosInversion.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setActivoId(a.id)}
+                  className={`rounded-full px-3 py-2 text-sm ${
+                    activoId === a.id ? "bg-clay text-white" : "bg-white ring-1 ring-inset ring-sand"
+                  }`}
+                >
+                  {a.nombre}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="mt-1 text-xs text-taupe/70">Se reparte entre Rocha y Lalo segun los sueldos del mes.</p>
+        </div>
+      )}
 
       {requiereMedioPago && (
         <div>

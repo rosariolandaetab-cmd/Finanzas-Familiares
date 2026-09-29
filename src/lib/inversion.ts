@@ -1,220 +1,227 @@
 import { supabase } from "@/lib/supabase/client";
 import { sumarMesesAPeriodo } from "@/lib/formato";
-import type { MovimientoInversionInsert, TipoMovInversion, VInversionSaldo } from "@/types/database";
+import type {
+  ActivoInversion,
+  CuotaInversion,
+  MovActivoInversion,
+  ParticipanteInversion,
+  TipoActivoInversion,
+} from "@/types/database";
+
+// Portafolio de inversion (ver 08_portafolio_inversion.sql).
+//
+// Donde esta la plata: cada activo (fondo, terreno, prestamo...) tiene
+// movimientos cuyo monto cambia su valor. Valor del activo = suma de montos.
+//
+// De quien es: todo el portafolio es una bolsa comun repartida en cuotas.
+// Valor cuota = valor total del portafolio / cuotas totales. Al aportar se
+// compran cuotas al valor del dia, al retirar se venden. Las ganancias
+// (actualizar valor) no cambian las cuotas, solo suben su valor, asi que el
+// reparto entre Rocha y Lalo siempre cuadra solo.
 
 const CODIGO_SUELDO_ROCHA = "IN-01";
 const CODIGO_SUELDO_LALO = "IN-02";
-const CODIGO_GANANCIA_INVERSION = "IN-04";
 const CODIGO_RETIRO_INVERSION = "TR-02";
+const VALOR_CUOTA_INICIAL = 1000;
+
+export const TIPOS_ACTIVO: { valor: TipoActivoInversion; etiqueta: string }[] = [
+  { valor: "FONDO", etiqueta: "Fondo / fondo mutuo" },
+  { valor: "DEPOSITO", etiqueta: "Deposito a plazo" },
+  { valor: "ACCIONES", etiqueta: "Acciones / ETF" },
+  { valor: "TERRENO", etiqueta: "Terreno" },
+  { valor: "PROPIEDAD", etiqueta: "Propiedad" },
+  { valor: "PRESTAMO", etiqueta: "Prestamo a terceros" },
+  { valor: "OTRO", etiqueta: "Otro" },
+];
+
+export type ResumenActivo = ActivoInversion & {
+  valor: number;
+  capital: number; // lo puesto neto (aportes + traspasos - retiros)
+  ganancia: number; // suma de actualizaciones de valor
+  retorno: number | null; // ganancia / capital
+};
+
+export type ResumenParticipante = ParticipanteInversion & {
+  cuotas: number;
+  valor: number;
+  porcentaje: number;
+  aportado: number; // aportes - retiros en pesos
+};
+
+export type Portafolio = {
+  activos: ResumenActivo[]; // incluye archivados (para el historial)
+  movs: MovActivoInversion[];
+  cuotas: CuotaInversion[];
+  participantes: ResumenParticipante[];
+  total: number;
+  gananciaTotal: number;
+  valorCuota: number;
+};
+
+function calcularValorCuota(total: number, cuotasTotales: number) {
+  return cuotasTotales > 0 ? total / cuotasTotales : VALOR_CUOTA_INICIAL;
+}
+
+export async function obtenerPortafolio(): Promise<Portafolio> {
+  const [{ data: activos }, { data: movs }, { data: cuotas }, { data: participantes }] = await Promise.all([
+    supabase.from("inversion_activos").select("*").order("id"),
+    supabase.from("inversion_activo_movs").select("*").order("fecha", { ascending: false }).order("creado_en", { ascending: false }),
+    supabase.from("inversion_cuotas").select("*"),
+    supabase.from("inversion_participantes").select("*").eq("activo", true).order("id"),
+  ]);
+
+  const listaMovs = movs ?? [];
+  const resumenActivos: ResumenActivo[] = (activos ?? []).map((a) => {
+    const propios = listaMovs.filter((m) => m.activo_id === a.id);
+    const valor = propios.reduce((s, m) => s + m.monto, 0);
+    const ganancia = propios.filter((m) => m.tipo === "VALOR").reduce((s, m) => s + m.monto, 0);
+    const capital = valor - ganancia;
+    return { ...a, valor, capital, ganancia, retorno: capital > 0 ? ganancia / capital : null };
+  });
+
+  const total = resumenActivos.reduce((s, a) => s + a.valor, 0);
+  const listaCuotas = cuotas ?? [];
+  const cuotasTotales = listaCuotas.reduce((s, c) => s + Number(c.cuotas), 0);
+  const valorCuota = calcularValorCuota(total, cuotasTotales);
+
+  const resumenParticipantes: ResumenParticipante[] = (participantes ?? []).map((p) => {
+    const propias = listaCuotas.filter((c) => c.participante_id === p.id);
+    const nCuotas = propias.reduce((s, c) => s + Number(c.cuotas), 0);
+    return {
+      ...p,
+      cuotas: nCuotas,
+      valor: Math.round(nCuotas * valorCuota),
+      porcentaje: cuotasTotales > 0 ? nCuotas / cuotasTotales : 0,
+      aportado: propias.reduce((s, c) => s + c.monto, 0),
+    };
+  });
+
+  return {
+    activos: resumenActivos,
+    movs: listaMovs,
+    cuotas: listaCuotas,
+    participantes: resumenParticipantes,
+    total,
+    gananciaTotal: resumenActivos.reduce((s, a) => s + a.ganancia, 0),
+    valorCuota,
+  };
+}
 
 async function idCategoria(codigo: string): Promise<number | null> {
   const { data } = await supabase.from("categorias").select("id").eq("codigo", codigo).maybeSingle();
   return data?.id ?? null;
 }
 
-async function idCuentaPorTipo(tipo: "CORRIENTE" | "INVERSION"): Promise<number | null> {
-  const { data } = await supabase.from("cuentas").select("id").eq("tipo", tipo).eq("activa", true).limit(1).maybeSingle();
+async function idCuentaCorriente(): Promise<number | null> {
+  const { data } = await supabase.from("cuentas").select("id").eq("tipo", "CORRIENTE").eq("activa", true).limit(1).maybeSingle();
   return data?.id ?? null;
 }
 
-async function participantePorNombre(nombre: string): Promise<number | null> {
-  const { data } = await supabase
-    .from("inversion_participantes")
-    .select("id")
-    .eq("nombre", nombre)
-    .eq("activo", true)
-    .maybeSingle();
-  return data?.id ?? null;
+// reparte un monto exacto en pesos segun pesos relativos, sin perder pesos por redondeo
+function repartir(monto: number, pesos: { id: number; peso: number }[]): { id: number; monto: number }[] {
+  const totalPeso = pesos.reduce((s, p) => s + p.peso, 0);
+  let asignado = 0;
+  return pesos.map((p, i) => {
+    const parte = i === pesos.length - 1 ? monto - asignado : Math.round((monto * p.peso) / totalPeso);
+    asignado += parte;
+    return { id: p.id, monto: parte };
+  });
 }
 
-export async function obtenerSaldos(): Promise<VInversionSaldo[]> {
-  const { data } = await supabase.from("v_inversion_saldos").select("*").order("id");
-  return data ?? [];
-}
-
-function repartirMontoExacto(total: number, pctPrimero: number): [number, number] {
-  const primero = Math.round(total * pctPrimero);
-  return [primero, total - primero];
-}
-
-// Reparte un "Aporte a inversion" ya registrado en movimientos, segun el sueldo
-// de cada uno ese mes. Si no hay sueldos registrados ese mes, reparte 50/50.
-export async function repartirAporteInversion({
-  movimientoId,
-  periodo,
-  monto,
-  fecha,
-  comentario: comentarioUsuario,
-  creadoPor,
-}: {
-  movimientoId: string;
-  periodo: string;
-  monto: number;
-  fecha: string;
-  comentario: string | null;
-  creadoPor: number | null;
-}) {
-  const [catSueldoRocha, catSueldoLalo, rochaId, laloId] = await Promise.all([
-    idCategoria(CODIGO_SUELDO_ROCHA),
-    idCategoria(CODIGO_SUELDO_LALO),
-    participantePorNombre("Rocha"),
-    participantePorNombre("Lalo"),
-  ]);
-  if (!rochaId || !laloId) return;
-
-  let pctRocha = 0.5;
-  let sinSueldosRegistrados = true;
-  if (catSueldoRocha && catSueldoLalo) {
+// % de Rocha segun los sueldos del mes; 50/50 si no hay sueldos registrados
+async function pesosPorSueldo(periodo: string, rochaId: number, laloId: number) {
+  const [catRocha, catLalo] = await Promise.all([idCategoria(CODIGO_SUELDO_ROCHA), idCategoria(CODIGO_SUELDO_LALO)]);
+  if (catRocha && catLalo) {
     const { data: movs } = await supabase
       .from("v_movimientos")
       .select("categoria_id, monto")
       .eq("periodo_devengado", periodo)
-      .in("categoria_id", [catSueldoRocha, catSueldoLalo]);
-    const sueldoRocha = (movs ?? []).filter((m) => m.categoria_id === catSueldoRocha).reduce((a, m) => a + m.monto, 0);
-    const sueldoLalo = (movs ?? []).filter((m) => m.categoria_id === catSueldoLalo).reduce((a, m) => a + m.monto, 0);
-    const total = sueldoRocha + sueldoLalo;
-    if (total > 0) {
-      pctRocha = sueldoRocha / total;
-      sinSueldosRegistrados = false;
+      .in("categoria_id", [catRocha, catLalo]);
+    const sueldoRocha = (movs ?? []).filter((m) => m.categoria_id === catRocha).reduce((a, m) => a + m.monto, 0);
+    const sueldoLalo = (movs ?? []).filter((m) => m.categoria_id === catLalo).reduce((a, m) => a + m.monto, 0);
+    if (sueldoRocha + sueldoLalo > 0) {
+      return { pesos: [{ id: rochaId, peso: sueldoRocha }, { id: laloId, peso: sueldoLalo }], porSueldo: true };
     }
   }
-
-  const [montoRocha, montoLalo] = repartirMontoExacto(monto, pctRocha);
-  const comentario =
-    [comentarioUsuario, sinSueldosRegistrados ? "Reparto 50/50 (sin sueldos registrados ese mes)" : null]
-      .filter(Boolean)
-      .join(" · ") || null;
-
-  const filas: MovimientoInversionInsert[] = [
-    {
-      fecha,
-      tipo: "APORTE",
-      participante_id: rochaId,
-      monto: montoRocha,
-      porcentaje_aplicado: pctRocha,
-      movimiento_id: movimientoId,
-      comentario,
-      creado_por: creadoPor,
-    },
-    {
-      fecha,
-      tipo: "APORTE",
-      participante_id: laloId,
-      monto: montoLalo,
-      porcentaje_aplicado: 1 - pctRocha,
-      movimiento_id: movimientoId,
-      comentario,
-      creado_por: creadoPor,
-    },
-  ];
-
-  await supabase.from("inversion_movimientos").insert(filas);
+  return { pesos: [{ id: rochaId, peso: 1 }, { id: laloId, peso: 1 }], porSueldo: false };
 }
 
-// Reparte una ganancia. Por defecto entre los participantes activos, segun
-// cuanto tiene cada uno hoy. Si se pasa participantesIds, reparte solo entre
-// esos (por ejemplo Rocha y Lalo, o uno solo que se lleva el 100%). Tambien
-// crea el movimiento correspondiente (categoria "Ganancia inversion", tipo
-// Transferencia: no cuenta como ingreso de la familia, igual que Aporte y
-// Retiro de inversion).
-export async function registrarGanancia({
+// Aporte desde Registrar (Transferencia -> Aporte a inversion). El movimiento
+// de la cuenta comun ya esta guardado; aqui se suma al activo elegido y se
+// compran cuotas para Rocha y Lalo segun los sueldos del mes.
+export async function registrarAporteInversion({
+  movimientoId,
+  activoId,
   monto,
   fecha,
   comentario,
   creadoPor,
-  participantesIds,
 }: {
+  movimientoId: string;
+  activoId: number;
   monto: number;
   fecha: string;
   comentario: string | null;
   creadoPor: number | null;
-  participantesIds?: number[];
 }): Promise<{ error: string | null }> {
-  const [saldosTodos, categoriaId, cuentaId] = await Promise.all([
-    obtenerSaldos(),
-    idCategoria(CODIGO_GANANCIA_INVERSION),
-    idCuentaPorTipo("INVERSION"),
-  ]);
-  if (!categoriaId || !cuentaId) return { error: "Falta configuracion en Supabase (categoria o cuenta de inversion)." };
+  const portafolio = await obtenerPortafolio();
+  const rocha = portafolio.participantes.find((p) => p.nombre === "Rocha");
+  const lalo = portafolio.participantes.find((p) => p.nombre === "Lalo");
+  if (!rocha || !lalo) return { error: "No encontre a Rocha y Lalo en la inversion." };
 
-  const saldos =
-    participantesIds && participantesIds.length > 0
-      ? saldosTodos.filter((s) => participantesIds.includes(s.id))
-      : saldosTodos;
-  if (saldos.length === 0) return { error: "No encontre a los participantes elegidos." };
+  const { pesos, porSueldo } = await pesosPorSueldo(fecha.slice(0, 7), rocha.id, lalo.id);
+  const operacionId = crypto.randomUUID();
+  const nota = [comentario, porSueldo ? null : "Reparto 50/50 (sin sueldos registrados ese mes)"].filter(Boolean).join(" · ") || null;
 
-  let pesos: { id: number; pct: number }[];
-  if (saldos.length === 1) {
-    pesos = [{ id: saldos[0].id, pct: 1 }];
-  } else {
-    const totalSaldo = saldos.reduce((a, s) => a + Math.max(0, s.saldo_actual), 0);
-    if (totalSaldo <= 0) return { error: "No hay saldo positivo entre los participantes elegidos." };
-    pesos = saldos.map((s) => ({ id: s.id, pct: Math.max(0, s.saldo_actual) / totalSaldo }));
-  }
-
-  const { data: movimiento, error: errorMov } = await supabase
-    .from("movimientos")
-    .insert({
-      fecha_compra: fecha,
-      fecha_caja: fecha,
-      categoria_id: categoriaId,
-      monto,
-      cuenta_id: cuentaId,
-      estado: "PAGADO",
-      comentario,
-      origen: "MANUAL",
-      creado_por: creadoPor,
-    })
-    .select("id")
-    .single();
-  if (errorMov || !movimiento) return { error: "No se pudo guardar la ganancia." };
-
-  await supabase.from("movimientos").update({ recurrencia: "TRANSFERENCIA" }).eq("id", movimiento.id);
-
-  const filas: MovimientoInversionInsert[] = pesos.map((p) => ({
+  const { error } = await supabase.from("inversion_activo_movs").insert({
+    operacion_id: operacionId,
     fecha,
-    tipo: "GANANCIA" as TipoMovInversion,
-    participante_id: p.id,
-    monto: Math.round(monto * p.pct),
-    porcentaje_aplicado: p.pct,
-    movimiento_id: movimiento.id,
-    comentario,
+    activo_id: activoId,
+    tipo: "APORTE",
+    monto,
+    movimiento_id: movimientoId,
+    comentario: nota,
     creado_por: creadoPor,
-  }));
+  });
+  if (error) return { error: "No se pudo registrar el aporte en la inversion." };
 
-  await supabase.from("inversion_movimientos").insert(filas);
+  await supabase.from("inversion_cuotas").insert(
+    repartir(monto, pesos).map((r) => ({
+      operacion_id: operacionId,
+      fecha,
+      participante_id: r.id,
+      cuotas: r.monto / portafolio.valorCuota,
+      valor_cuota: portafolio.valorCuota,
+      monto: r.monto,
+    }))
+  );
   return { error: null };
 }
 
-// Retira solo entre Rocha y Lalo, segun el % que tiene cada uno del total
-// de esos dos (Bajo Lalo no retira todavia).
-export async function registrarRetiro({
+// Retiro hacia la cuenta comun: crea la transferencia "Retiro de inversion",
+// baja el valor del activo y vende cuotas de cada uno segun su % del total.
+export async function registrarRetiroInversion({
+  activoId,
   monto,
   fecha,
   comentario,
   creadoPor,
 }: {
+  activoId: number;
   monto: number;
   fecha: string;
   comentario: string | null;
   creadoPor: number | null;
 }): Promise<{ error: string | null }> {
-  const [saldos, categoriaId, cuentaId] = await Promise.all([
-    obtenerSaldos(),
-    idCategoria(CODIGO_RETIRO_INVERSION),
-    idCuentaPorTipo("CORRIENTE"),
-  ]);
+  const portafolio = await obtenerPortafolio();
+  const activo = portafolio.activos.find((a) => a.id === activoId);
+  if (!activo) return { error: "No encontre ese activo." };
+  if (monto > activo.valor) return { error: `${activo.nombre} tiene solo $${activo.valor.toLocaleString("es-CL")}.` };
+  const conCuotas = portafolio.participantes.filter((p) => p.cuotas > 0);
+  if (conCuotas.length === 0) return { error: "Nadie tiene cuotas en la inversion." };
+
+  const [categoriaId, cuentaId] = await Promise.all([idCategoria(CODIGO_RETIRO_INVERSION), idCuentaCorriente()]);
   if (!categoriaId || !cuentaId) return { error: "Falta configuracion en Supabase (categoria o cuenta corriente)." };
-
-  const rocha = saldos.find((s) => s.nombre === "Rocha");
-  const lalo = saldos.find((s) => s.nombre === "Lalo");
-  if (!rocha || !lalo) return { error: "No encontre a Rocha y Lalo entre los participantes." };
-
-  const totalRochaLalo = Math.max(0, rocha.saldo_actual) + Math.max(0, lalo.saldo_actual);
-  if (totalRochaLalo <= 0) return { error: "Rocha y Lalo no tienen saldo para retirar." };
-  if (monto > totalRochaLalo) return { error: "El monto a retirar es mayor al saldo disponible entre Rocha y Lalo." };
-
-  const pctRocha = Math.max(0, rocha.saldo_actual) / totalRochaLalo;
 
   const { data: movimiento, error: errorMov } = await supabase
     .from("movimientos")
@@ -232,45 +239,126 @@ export async function registrarRetiro({
     .select("id")
     .single();
   if (errorMov || !movimiento) return { error: "No se pudo guardar el retiro." };
-
   await supabase.from("movimientos").update({ recurrencia: "TRANSFERENCIA" }).eq("id", movimiento.id);
 
-  const [montoRocha, montoLalo] = repartirMontoExacto(monto, pctRocha);
-
-  const filas: MovimientoInversionInsert[] = [
-    {
+  const operacionId = crypto.randomUUID();
+  await supabase.from("inversion_activo_movs").insert({
+    operacion_id: operacionId,
+    fecha,
+    activo_id: activoId,
+    tipo: "RETIRO",
+    monto: -monto,
+    movimiento_id: movimiento.id,
+    comentario,
+    creado_por: creadoPor,
+  });
+  await supabase.from("inversion_cuotas").insert(
+    repartir(
+      monto,
+      conCuotas.map((p) => ({ id: p.id, peso: p.cuotas }))
+    ).map((r) => ({
+      operacion_id: operacionId,
       fecha,
-      tipo: "RETIRO",
-      participante_id: rocha.id,
-      monto: -montoRocha,
-      porcentaje_aplicado: pctRocha,
-      movimiento_id: movimiento.id,
-      comentario,
-      creado_por: creadoPor,
-    },
-    {
-      fecha,
-      tipo: "RETIRO",
-      participante_id: lalo.id,
-      monto: -montoLalo,
-      porcentaje_aplicado: 1 - pctRocha,
-      movimiento_id: movimiento.id,
-      comentario,
-      creado_por: creadoPor,
-    },
-  ];
-
-  await supabase.from("inversion_movimientos").insert(filas);
+      participante_id: r.id,
+      cuotas: -r.monto / portafolio.valorCuota,
+      valor_cuota: portafolio.valorCuota,
+      monto: -r.monto,
+    }))
+  );
   return { error: null };
 }
 
-export async function actualizarSaldoInicial(participanteId: number, saldoInicial: number) {
-  await supabase.from("inversion_participantes").update({ saldo_inicial: saldoInicial }).eq("id", participanteId);
+// Mover plata de un activo a otro (ej: del fondo del banco al terreno). No
+// cambia el total ni las cuotas.
+export async function registrarTraspaso({
+  origenId,
+  destinoId,
+  monto,
+  fecha,
+  comentario,
+  creadoPor,
+}: {
+  origenId: number;
+  destinoId: number;
+  monto: number;
+  fecha: string;
+  comentario: string | null;
+  creadoPor: number | null;
+}): Promise<{ error: string | null }> {
+  if (origenId === destinoId) return { error: "Elige dos activos distintos." };
+  const portafolio = await obtenerPortafolio();
+  const origen = portafolio.activos.find((a) => a.id === origenId);
+  if (!origen) return { error: "No encontre el activo de origen." };
+  if (monto > origen.valor) return { error: `${origen.nombre} tiene solo $${origen.valor.toLocaleString("es-CL")}.` };
+
+  const operacionId = crypto.randomUUID();
+  const { error } = await supabase.from("inversion_activo_movs").insert([
+    { operacion_id: operacionId, fecha, activo_id: origenId, tipo: "TRASPASO", monto: -monto, comentario, creado_por: creadoPor },
+    { operacion_id: operacionId, fecha, activo_id: destinoId, tipo: "TRASPASO", monto, comentario, creado_por: creadoPor },
+  ]);
+  return { error: error ? "No se pudo guardar el traspaso." : null };
+}
+
+// Registra cuanto vale hoy un activo (segun cartola o tasacion). La diferencia
+// con el valor anterior es la ganancia (o perdida).
+export async function actualizarValorActivo({
+  activoId,
+  valorNuevo,
+  fecha,
+  comentario,
+  creadoPor,
+}: {
+  activoId: number;
+  valorNuevo: number;
+  fecha: string;
+  comentario: string | null;
+  creadoPor: number | null;
+}): Promise<{ error: string | null; diferencia: number }> {
+  const portafolio = await obtenerPortafolio();
+  const activo = portafolio.activos.find((a) => a.id === activoId);
+  if (!activo) return { error: "No encontre ese activo.", diferencia: 0 };
+  const diferencia = valorNuevo - activo.valor;
+  if (diferencia === 0) return { error: "El valor es el mismo que ya estaba registrado.", diferencia };
+
+  const { error } = await supabase.from("inversion_activo_movs").insert({
+    operacion_id: crypto.randomUUID(),
+    fecha,
+    activo_id: activoId,
+    tipo: "VALOR",
+    monto: diferencia,
+    comentario,
+    creado_por: creadoPor,
+  });
+  return { error: error ? "No se pudo actualizar el valor." : null, diferencia };
+}
+
+export async function crearActivo(nombre: string, tipo: TipoActivoInversion, comentario: string | null) {
+  const { error } = await supabase.from("inversion_activos").insert({ nombre, tipo, comentario, activo: true });
+  return { error: error ? "No se pudo crear el activo." : null };
+}
+
+export async function archivarActivo(activo: ResumenActivo): Promise<{ error: string | null }> {
+  if (activo.valor !== 0) {
+    return { error: "Este activo todavia tiene valor. Retira o traspasa la plata antes de eliminarlo." };
+  }
+  await supabase.from("inversion_activos").update({ activo: false }).eq("id", activo.id);
+  return { error: null };
+}
+
+// Solo se puede deshacer la ultima operacion: las anteriores ya fijaron el
+// valor cuota con que se calcularon las siguientes.
+export async function deshacerOperacion(operacionId: string): Promise<{ error: string | null }> {
+  const { data: filas } = await supabase.from("inversion_activo_movs").select("movimiento_id").eq("operacion_id", operacionId);
+  await supabase.from("inversion_cuotas").delete().eq("operacion_id", operacionId);
+  await supabase.from("inversion_activo_movs").delete().eq("operacion_id", operacionId);
+  const idsMov = (filas ?? []).map((f) => f.movimiento_id).filter((id): id is string => !!id);
+  if (idsMov.length > 0) await supabase.from("movimientos").delete().in("id", idsMov);
+  return { error: null };
 }
 
 export async function aportesInversionPeriodo(periodo: string): Promise<number> {
   const { data } = await supabase
-    .from("inversion_movimientos")
+    .from("inversion_activo_movs")
     .select("monto")
     .eq("tipo", "APORTE")
     .gte("fecha", `${periodo}-01`)

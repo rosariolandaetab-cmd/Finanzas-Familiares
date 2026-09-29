@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { etiquetaPeriodo, formatoPesos, periodoActual, sumarMesesAPeriodo } from "@/lib/formato";
 import { AhorroChart } from "@/components/AhorroChart";
 import { Sparkline } from "@/components/Sparkline";
-import { obtenerSaldos } from "@/lib/inversion";
+import { obtenerPortafolio } from "@/lib/inversion";
 import type { Categoria, Recurrencia, TipoFlujo, VMovimiento, VPresupuestoMes, VResumenMensual } from "@/types/database";
 
 const RANGOS = [3, 6, 12] as const;
@@ -69,7 +69,7 @@ export default function AnalisisPage() {
         { data: resumenActualData },
         { data: movsRecurrentesActual },
         { data: presupuestoData },
-        saldosInversion,
+        portafolio,
       ] = await Promise.all([
         supabase.from("categorias").select("*").eq("activa", true),
         supabase.from("v_resumen_mensual").select("*").in("periodo", periodos),
@@ -92,7 +92,7 @@ export default function AnalisisPage() {
           .eq("tipo_flujo", "GASTO")
           .eq("recurrencia", "RECURRENTE"),
         supabase.from("v_presupuesto_mes").select("*").eq("periodo", mesActual),
-        obtenerSaldos(),
+        obtenerPortafolio(),
       ]);
       if (cancelado) return;
       setCategorias(catsData ?? []);
@@ -102,9 +102,7 @@ export default function AnalisisPage() {
       setResumenMesActual(resumenActualData ?? null);
       setGastoRecurrenteMesActual((movsRecurrentesActual ?? []).reduce((a, m) => a + m.monto, 0));
       setPresupuestoMesActual(presupuestoData ?? []);
-      setSaldoFondoEmergencia(
-        saldosInversion.filter((s) => s.nombre === "Rocha" || s.nombre === "Lalo").reduce((a, s) => a + Math.max(0, s.saldo_actual), 0)
-      );
+      setSaldoFondoEmergencia(Math.max(0, portafolio.total));
       setCargando(false);
     }
     cargar();
