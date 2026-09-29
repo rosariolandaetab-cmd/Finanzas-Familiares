@@ -8,7 +8,8 @@ import {
   actualizarValorActivo,
   archivarActivo,
   crearActivo,
-  deshacerOperacion,
+  agregarSaldoExistente,
+  eliminarOperacion,
   obtenerPortafolio,
   registrarRetiroInversion,
   registrarTraspaso,
@@ -20,7 +21,7 @@ import { aportarFondoDesdeInversion, obtenerSaldosFondos } from "@/lib/fondos";
 import { EvolucionParticipantesChart, type PuntoParticipantes } from "@/components/EvolucionParticipantesChart";
 import type { MovActivoInversion, MovimientoInversion, TipoActivoInversion, TipoMovActivo } from "@/types/database";
 
-type Accion = "VALOR" | "TRASPASO" | "RETIRO" | "NUEVO" | null;
+type Accion = "VALOR" | "TRASPASO" | "RETIRO" | "NUEVO" | "SALDO" | null;
 
 const COLORES_PARTICIPANTE: Record<string, string> = {
   Rocha: "#B5602F",
@@ -58,6 +59,8 @@ export function InversionTab() {
   const [activoId, setActivoId] = useState<number | null>(null);
   const [destinoId, setDestinoId] = useState<number | null>(null);
   const [retiranIds, setRetiranIds] = useState<number[]>([]);
+  // monto que se le asigna a cada persona al cargar plata que ya estaba invertida
+  const [asignaciones, setAsignaciones] = useState<Record<number, string>>({});
   const [fondos, setFondos] = useState<{ id: number; nombre: string }[]>([]);
   // a donde va un retiro: null = sale de la inversion (sin pasar a la caja), o un fondo
   const [fondoDestinoId, setFondoDestinoId] = useState<number | null>(null);
@@ -137,12 +140,6 @@ export function InversionTab() {
     return lista.sort((a, b) => b.fecha.localeCompare(a.fecha) || b.creadoEn.localeCompare(a.creadoEn));
   }, [portafolio, comentariosMov, nombreActivo]);
 
-  // la ultima operacion ingresada (no la de fecha mas nueva) es la unica que se puede deshacer
-  const ultimaOperacionId = useMemo(
-    () => operaciones.reduce<{ id: string; creadoEn: string } | null>((max, op) => (!max || op.creadoEn > max.creadoEn ? op : max), null)?.id,
-    [operaciones]
-  );
-
   // evolucion del valor de cada persona: cuotas de cada uno x valor cuota de ese dia
   const evolucion = useMemo(() => {
     if (!portafolio) return [];
@@ -176,6 +173,7 @@ export function InversionTab() {
     setActivoId(activo?.id ?? (activosVigentes.length === 1 ? activosVigentes[0].id : null));
     setDestinoId(null);
     setFondoDestinoId(null);
+    setAsignaciones({});
     // por defecto retiran Rocha y Lalo (Bajo Lalo solo si se elige)
     setRetiranIds(
       (portafolio?.participantes ?? []).filter((p) => p.nombre === "Rocha" || p.nombre === "Lalo").map((p) => p.id)
@@ -205,6 +203,15 @@ export function InversionTab() {
     } else if (accion === "TRASPASO" && activoId && destinoId) {
       ({ error } = await registrarTraspaso({ origenId: activoId, destinoId, monto: montoNumero, fecha, comentario: nota, creadoPor }));
       exito = "Traspaso registrado ✓";
+    } else if (accion === "SALDO" && activoId) {
+      ({ error } = await agregarSaldoExistente({
+        activoId,
+        fecha,
+        comentario: nota,
+        creadoPor,
+        asignaciones: Object.entries(asignaciones).map(([id, m]) => ({ participanteId: Number(id), monto: Number(m || "0") })),
+      }));
+      exito = "Saldo agregado ✓";
     } else if (accion === "RETIRO" && activoId) {
       ({ error } = await registrarRetiroInversion({
         activoId,
@@ -247,10 +254,10 @@ export function InversionTab() {
     cargar();
   }
 
-  async function deshacer(operacionId: string) {
-    if (!confirm("¿Deshacer esta operacion? Si fue un aporte desde Registrar, tambien se borra ese movimiento.")) return;
-    await deshacerOperacion(operacionId);
-    avisar("Operacion deshecha ✓");
+  async function eliminar(operacionId: string) {
+    if (!confirm("¿Eliminar esta operacion? Si fue un aporte desde Registrar, tambien se borra ese movimiento de la cuenta.")) return;
+    await eliminarOperacion(operacionId);
+    avisar("Operacion eliminada ✓");
     cargar();
   }
 
@@ -262,6 +269,8 @@ export function InversionTab() {
     !guardando &&
     (accion === "NUEVO"
       ? !!nombreNuevo.trim()
+      : accion === "SALDO"
+      ? !!activoId && Object.values(asignaciones).some((m) => Number(m || "0") > 0)
       : !!activoId &&
         monto !== "" &&
         (accion === "VALOR" || Number(monto) > 0) &&
@@ -330,13 +339,22 @@ export function InversionTab() {
                 <button type="button" onClick={() => eliminarActivo(a)} className="text-red-600">
                   Eliminar
                 </button>
-                <button
-                  type="button"
-                  onClick={() => abrir("VALOR", a)}
-                  className="rounded-full bg-cream px-2.5 py-1 font-medium text-ink"
-                >
-                  Actualizar valor
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => abrir("SALDO", a)}
+                    className="rounded-full bg-cream px-2.5 py-1 font-medium text-ink"
+                  >
+                    + Saldo existente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => abrir("VALOR", a)}
+                    className="rounded-full bg-cream px-2.5 py-1 font-medium text-ink"
+                  >
+                    Actualizar valor
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -379,6 +397,8 @@ export function InversionTab() {
               ? "¿Cuanto vale hoy?"
               : accion === "TRASPASO"
               ? "Mover plata entre inversiones"
+              : accion === "SALDO"
+              ? "Agregar plata que ya estaba invertida"
               : "Retirar de la inversion"}
           </p>
 
@@ -407,7 +427,8 @@ export function InversionTab() {
                 ))}
               </div>
               <p className="text-[11px] text-taupe/70">
-                Parte en $0. Para llenarla, traspasa desde otra inversion o aporta desde Registrar.
+                Parte en $0. Si es plata que ya tienes invertida en otro lado, despues usa "+ Saldo existente" en esa
+                inversion para cargarla y asignarla a quien corresponde.
               </p>
             </>
           ) : (
@@ -505,14 +526,39 @@ export function InversionTab() {
                   </p>
                 </div>
               )}
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="$0"
-                value={monto}
-                onChange={(e) => setMonto(e.target.value.replace(/[^0-9]/g, ""))}
-                className="w-full rounded-xl border border-sand px-3 py-3 text-center text-2xl font-semibold"
-              />
+              {accion === "SALDO" && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] text-taupe/70">
+                    No sale de la caja. Escribe cuanto le corresponde a cada uno (puede ser todo para una sola persona).
+                  </p>
+                  {portafolio.participantes.map((p) => (
+                    <label key={p.id} className="flex items-center justify-between gap-2 text-sm text-ink">
+                      <span>{p.nombre}</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="$0"
+                        value={asignaciones[p.id] ? `$${Number(asignaciones[p.id]).toLocaleString("es-CL")}` : ""}
+                        onChange={(e) => setAsignaciones((prev) => ({ ...prev, [p.id]: e.target.value.replace(/[^0-9]/g, "") }))}
+                        className="w-40 rounded-xl border border-sand px-3 py-2 text-right text-sm"
+                      />
+                    </label>
+                  ))}
+                  <p className="text-right text-xs font-medium text-ink">
+                    Total {formatoPesos(Object.values(asignaciones).reduce((a, m) => a + Number(m || "0"), 0))}
+                  </p>
+                </div>
+              )}
+              {accion !== "SALDO" && (
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="$0"
+                  value={monto}
+                  onChange={(e) => setMonto(e.target.value.replace(/[^0-9]/g, ""))}
+                  className="w-full rounded-xl border border-sand px-3 py-3 text-center text-2xl font-semibold"
+                />
+              )}
               <input
                 type="date"
                 value={fecha}
@@ -598,11 +644,9 @@ export function InversionTab() {
                         </div>
                       ))
                     )}
-                    {op.id === ultimaOperacionId && op.tipo !== "SALDO_INICIAL" && (
-                      <button type="button" onClick={() => deshacer(op.id)} className="pt-1 text-red-600 underline">
-                        Deshacer esta operacion
-                      </button>
-                    )}
+                    <button type="button" onClick={() => eliminar(op.id)} className="pt-1 text-red-600 underline">
+                      Eliminar esta operacion
+                    </button>
                   </div>
                 )}
               </div>

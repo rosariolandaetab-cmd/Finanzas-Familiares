@@ -333,14 +333,99 @@ export async function archivarActivo(activo: ResumenActivo): Promise<{ error: st
   return { error: null };
 }
 
-// Solo se puede deshacer la ultima operacion: las anteriores ya fijaron el
-// valor cuota con que se calcularon las siguientes.
-export async function deshacerOperacion(operacionId: string): Promise<{ error: string | null }> {
+// Plata que ya estaba invertida en otro lado y se suma al portafolio (no sale
+// de la caja). Cada uno compra cuotas por el monto que se le asigna.
+export async function agregarSaldoExistente({
+  activoId,
+  fecha,
+  comentario,
+  creadoPor,
+  asignaciones,
+}: {
+  activoId: number;
+  fecha: string;
+  comentario: string | null;
+  creadoPor: number | null;
+  asignaciones: { participanteId: number; monto: number }[];
+}): Promise<{ error: string | null }> {
+  const validas = asignaciones.filter((a) => a.monto > 0);
+  const total = validas.reduce((s, a) => s + a.monto, 0);
+  if (total <= 0) return { error: "Asigna el monto a al menos una persona." };
+
+  const portafolio = await obtenerPortafolio();
+  const detalle = validas
+    .map((a) => `${portafolio.participantes.find((p) => p.id === a.participanteId)?.nombre} $${a.monto.toLocaleString("es-CL")}`)
+    .join(", ");
+  const operacionId = crypto.randomUUID();
+  const { error } = await supabase.from("inversion_activo_movs").insert({
+    operacion_id: operacionId,
+    fecha,
+    activo_id: activoId,
+    tipo: "SALDO_INICIAL",
+    monto: total,
+    comentario: [comentario, detalle].filter(Boolean).join(" · "),
+    creado_por: creadoPor,
+  });
+  if (error) return { error: "No se pudo agregar el saldo." };
+  await supabase.from("inversion_cuotas").insert(
+    validas.map((a) => ({
+      operacion_id: operacionId,
+      fecha,
+      participante_id: a.participanteId,
+      cuotas: a.monto / portafolio.valorCuota,
+      valor_cuota: portafolio.valorCuota,
+      monto: a.monto,
+    }))
+  );
+  return { error: null };
+}
+
+// Vuelve a calcular las cuotas de todas las operaciones en el orden en que se
+// ingresaron (igual que cuando se registraron): cada una compra o vende al
+// valor cuota que habia justo antes. Los pesos de cada persona no cambian,
+// solo sus cuotas. Se usa al borrar una operacion en medio del historial.
+export async function recalcularCuotas() {
+  const [{ data: movs }, { data: cuotas }] = await Promise.all([
+    supabase.from("inversion_activo_movs").select("operacion_id, monto, creado_en"),
+    supabase.from("inversion_cuotas").select("*"),
+  ]);
+  const ops = new Map<string, { creadoEn: string; monto: number }>();
+  for (const m of movs ?? []) {
+    const op = ops.get(m.operacion_id);
+    if (!op) ops.set(m.operacion_id, { creadoEn: m.creado_en, monto: m.monto });
+    else {
+      op.monto += m.monto;
+      if (m.creado_en < op.creadoEn) op.creadoEn = m.creado_en;
+    }
+  }
+  const orden = Array.from(ops.entries()).sort(([, a], [, b]) => a.creadoEn.localeCompare(b.creadoEn));
+
+  let total = 0;
+  let cuotasTotales = 0;
+  const cambios: { id: string; cuotas: number; valor_cuota: number }[] = [];
+  for (const [id, op] of orden) {
+    const valorCuota = calcularValorCuota(total, cuotasTotales);
+    for (const c of (cuotas ?? []).filter((x) => x.operacion_id === id)) {
+      const nuevas = c.monto / valorCuota;
+      if (Math.abs(nuevas - Number(c.cuotas)) > 1e-6) cambios.push({ id: c.id, cuotas: nuevas, valor_cuota: valorCuota });
+      cuotasTotales += nuevas;
+    }
+    total += op.monto;
+  }
+  await Promise.all(
+    cambios.map((c) => supabase.from("inversion_cuotas").update({ cuotas: c.cuotas, valor_cuota: c.valor_cuota }).eq("id", c.id))
+  );
+}
+
+// Borra una operacion (y, si fue un aporte desde Registrar, su movimiento en
+// la cuenta comun) y recalcula las cuotas de las operaciones siguientes.
+export async function eliminarOperacion(operacionId: string): Promise<{ error: string | null }> {
   const { data: filas } = await supabase.from("inversion_activo_movs").select("movimiento_id").eq("operacion_id", operacionId);
   await supabase.from("inversion_cuotas").delete().eq("operacion_id", operacionId);
   await supabase.from("inversion_activo_movs").delete().eq("operacion_id", operacionId);
   const idsMov = (filas ?? []).map((f) => f.movimiento_id).filter((id): id is string => !!id);
   if (idsMov.length > 0) await supabase.from("movimientos").delete().in("id", idsMov);
+  await recalcularCuotas();
   return { error: null };
 }
 
