@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { formatoPesos, periodoActual } from "@/lib/formato";
 import { SelectorPeriodo } from "@/components/SelectorPeriodo";
+import { cargarCatalogoPersonal, etiquetaCuentaPersonal, moverMovimientoAPersonal } from "@/lib/personal";
+import type { CategoriaPersonal, CuentaPersonal } from "@/types/database";
 import type { Categoria, Cuenta, EstadoMov, Persona, TipoFlujo, VMovimiento } from "@/types/database";
 
 const TIPOS: { valor: TipoFlujo; etiqueta: string }[] = [
@@ -45,6 +47,11 @@ function Historial() {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
+  // vacio para quien no tiene cuentas personales (la seguridad de Supabase no le devuelve nada)
+  const [catalogoPersonal, setCatalogoPersonal] = useState<{ cuentas: CuentaPersonal[]; categorias: CategoriaPersonal[] }>({
+    cuentas: [],
+    categorias: [],
+  });
   const [movimientos, setMovimientos] = useState<VMovimiento[]>([]);
   const [cargando, setCargando] = useState(true);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -71,6 +78,7 @@ function Historial() {
       .select("*")
       .eq("activa", true)
       .then(({ data }) => setCuentas(data ?? []));
+    cargarCatalogoPersonal().then(setCatalogoPersonal);
   }, []);
 
   const cargarMovimientos = useCallback(async () => {
@@ -265,6 +273,7 @@ function Historial() {
                   movimiento={m}
                   categorias={categorias}
                   cuentas={cuentas}
+                  catalogoPersonal={catalogoPersonal}
                   onCancelar={() => setEditandoId(null)}
                   onGuardado={() => {
                     setEditandoId(null);
@@ -348,6 +357,7 @@ function FilaEdicion({
   movimiento,
   categorias,
   cuentas,
+  catalogoPersonal,
   onCancelar,
   onGuardado,
   onBorrar,
@@ -355,6 +365,7 @@ function FilaEdicion({
   movimiento: VMovimiento;
   categorias: Categoria[];
   cuentas: Cuenta[];
+  catalogoPersonal: { cuentas: CuentaPersonal[]; categorias: CategoriaPersonal[] };
   onCancelar: () => void;
   onGuardado: () => void;
   onBorrar: () => void;
@@ -366,8 +377,15 @@ function FilaEdicion({
   const [fecha, setFecha] = useState(movimiento.fecha_compra);
   const [comentario, setComentario] = useState(movimiento.comentario ?? "");
   const [guardando, setGuardando] = useState(false);
+  const [moviendo, setMoviendo] = useState(false);
 
   const categoriaActual = categorias.find((c) => c.id === movimiento.categoria_id);
+  // solo gastos e ingresos comunes (no asignaciones, fondos ni transferencias) se pueden pasar a cuentas personales
+  const sePuedeMover =
+    catalogoPersonal.cuentas.length > 0 &&
+    (movimiento.tipo_flujo === "GASTO" || movimiento.tipo_flujo === "INGRESO") &&
+    movimiento.grupo !== "Asignacion personal" &&
+    movimiento.grupo !== "Fondos";
   const esDeInversion = ["TR-01", "TR-02", "IN-04"].includes(categoriaActual?.codigo ?? "");
 
   if (esDeInversion) {
@@ -381,6 +399,17 @@ function FilaEdicion({
           Cerrar
         </button>
       </div>
+    );
+  }
+
+  if (moviendo) {
+    return (
+      <MoverAPersonal
+        movimiento={movimiento}
+        catalogo={catalogoPersonal}
+        onCancelar={() => setMoviendo(false)}
+        onMovido={onGuardado}
+      />
     );
   }
 
@@ -471,6 +500,107 @@ function FilaEdicion({
         </button>
         <button type="button" onClick={onBorrar} className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">
           Borrar
+        </button>
+      </div>
+      {sePuedeMover && (
+        <button type="button" onClick={() => setMoviendo(true)} className="w-full pt-1 text-center text-xs text-clay underline">
+          Esto era mio, no de la familia: mover a mis cuentas
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MoverAPersonal({
+  movimiento,
+  catalogo,
+  onCancelar,
+  onMovido,
+}: {
+  movimiento: VMovimiento;
+  catalogo: { cuentas: CuentaPersonal[]; categorias: CategoriaPersonal[] };
+  onCancelar: () => void;
+  onMovido: () => void;
+}) {
+  const esGasto = movimiento.tipo_flujo === "GASTO";
+  const categorias = catalogo.categorias.filter((c) => c.activa && c.tipo === (esGasto ? "GASTO" : "INGRESO"));
+  const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [cuentaId, setCuentaId] = useState<number | null>(null);
+  const [moviendo, setMoviendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function mover() {
+    if (!categoriaId || (esGasto && !cuentaId)) return;
+    setMoviendo(true);
+    // solo lo pagado con tarjeta de credito puede quedar pendiente
+    const conCredito = catalogo.cuentas.find((c) => c.id === cuentaId)?.tipo === "CREDITO";
+    const r = await moverMovimientoAPersonal({
+      movimiento: { ...movimiento, estado: esGasto && conCredito ? movimiento.estado : "PAGADO" },
+      categoriaId,
+      cuentaId: esGasto ? cuentaId : null,
+    });
+    setMoviendo(false);
+    if (r.error) {
+      setError(r.error);
+      return;
+    }
+    onMovido();
+  }
+
+  return (
+    <div className="space-y-3 rounded-2xl bg-white p-3 ring-2 ring-clay">
+      <p className="text-sm text-ink">
+        Pasar <span className="font-semibold">{formatoPesos(movimiento.monto)}</span> ({movimiento.categoria}) a tus
+        cuentas. Se borra de la cuenta familiar.
+      </p>
+      <div>
+        <p className="mb-1 text-xs text-taupe">Categoria en tus cuentas</p>
+        <div className="flex flex-wrap gap-2">
+          {categorias.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoriaId(c.id)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                categoriaId === c.id ? "bg-clay text-white" : "bg-cream text-ink/70"
+              }`}
+            >
+              {c.nombre}
+            </button>
+          ))}
+        </div>
+      </div>
+      {esGasto && (
+        <div>
+          <p className="mb-1 text-xs text-taupe">¿Con que pagaste?</p>
+          <div className="flex flex-wrap gap-2">
+            {catalogo.cuentas.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCuentaId(c.id)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                  cuentaId === c.id ? "bg-clay text-white" : "bg-cream text-ink/70"
+                }`}
+              >
+                {etiquetaCuentaPersonal(c)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={mover}
+          disabled={moviendo || !categoriaId || (esGasto && !cuentaId)}
+          className="flex-1 rounded-xl bg-clay py-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {moviendo ? "Moviendo..." : "Mover a mis cuentas"}
+        </button>
+        <button type="button" onClick={onCancelar} className="rounded-xl bg-cream px-3 py-2 text-sm">
+          Cancelar
         </button>
       </div>
     </div>
