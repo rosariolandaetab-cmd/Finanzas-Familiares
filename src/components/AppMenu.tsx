@@ -84,6 +84,8 @@ export function AppMenu({ nombreUsuario }: { nombreUsuario: string }) {
             )}
           </div>
 
+          <CrearContrasena />
+
           <div className="mx-auto flex w-full max-w-md items-center justify-between text-sm text-white/60">
             <span>{nombreUsuario}</span>
             <button
@@ -126,6 +128,80 @@ function SeccionMenu({
             {item.etiqueta}
           </Link>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Con contraseña se entra desde la app de la pantalla de inicio y la sesion
+// queda guardada ahi (el link del correo abre el navegador, que es aparte).
+function CrearContrasena() {
+  const [abierto, setAbierto] = useState(false);
+  const [contrasena, setContrasena] = useState("");
+  const [repetir, setRepetir] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState<string | null>(null);
+
+  async function guardar() {
+    if (contrasena.length < 6) return setMensaje("Debe tener al menos 6 caracteres.");
+    if (contrasena !== repetir) return setMensaje("Las dos contraseñas no coinciden.");
+    setGuardando(true);
+    const { error } = await supabase.auth.updateUser({ password: contrasena });
+    setGuardando(false);
+    if (error) return setMensaje(`No se pudo guardar: ${error.message}`);
+    setMensaje("Contraseña guardada ✓ Ya puedes entrar con ella desde la app.");
+    setContrasena("");
+    setRepetir("");
+  }
+
+  if (!abierto) {
+    return (
+      <div className="mx-auto mb-3 w-full max-w-md text-sm">
+        <button type="button" onClick={() => setAbierto(true)} className="text-white/60 underline">
+          Crear o cambiar contraseña
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto mb-3 w-full max-w-md space-y-2 rounded-2xl bg-white/10 p-3 text-sm">
+      <input
+        type="password"
+        autoComplete="new-password"
+        placeholder="Nueva contraseña"
+        value={contrasena}
+        onChange={(e) => setContrasena(e.target.value)}
+        className="w-full rounded-xl px-3 py-2 text-ink"
+      />
+      <input
+        type="password"
+        autoComplete="new-password"
+        placeholder="Repetir contraseña"
+        value={repetir}
+        onChange={(e) => setRepetir(e.target.value)}
+        className="w-full rounded-xl px-3 py-2 text-ink"
+      />
+      {mensaje && <p className="text-white/80">{mensaje}</p>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={guardar}
+          disabled={guardando}
+          className="flex-1 rounded-xl bg-clay py-2 font-medium text-white disabled:opacity-50"
+        >
+          {guardando ? "Guardando..." : "Guardar contraseña"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setAbierto(false);
+            setMensaje(null);
+          }}
+          className="rounded-xl bg-white/20 px-3 py-2 text-white"
+        >
+          Cerrar
+        </button>
       </div>
     </div>
   );

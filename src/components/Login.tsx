@@ -3,19 +3,33 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 
-// Entrar con el codigo del correo (no con el link): el link se abre en el
+// Se entra con correo y contraseña. El link del correo se abre en el
 // navegador, que guarda la sesion aparte de la app instalada en la pantalla de
-// inicio, y por eso la app volvia a pedir el correo. Escribiendo el codigo
-// aqui mismo, la sesion queda guardada en la app.
+// inicio, y por eso la app volvia a pedir el correo. El link queda solo como
+// respaldo para quien todavia no crea su contraseña (se crea desde el menu).
 export function Login() {
+  const [modo, setModo] = useState<"CONTRASENA" | "LINK">("CONTRASENA");
   const [email, setEmail] = useState("");
-  const [codigo, setCodigo] = useState("");
+  const [contrasena, setContrasena] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [enviado, setEnviado] = useState(false);
-  const [verificando, setVerificando] = useState(false);
+  const [linkEnviado, setLinkEnviado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function enviarCodigo(e: React.FormEvent) {
+  async function entrarConContrasena(e: React.FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    const { error } = await supabase.auth.signInWithPassword({ email, password: contrasena });
+    setEnviando(false);
+    if (error) {
+      setError(
+        "Correo o contraseña incorrectos. Si todavia no creas tu contraseña, entra con link al correo y creala desde el menu."
+      );
+    }
+    // si sale bien, la sesion cambia y la app entra sola
+  }
+
+  async function enviarLink(e: React.FormEvent) {
     e.preventDefault();
     setEnviando(true);
     setError(null);
@@ -25,85 +39,80 @@ export function Login() {
     });
     setEnviando(false);
     if (error) {
-      setError(`No se pudo enviar el correo: ${error.message}`);
+      setError(`No se pudo enviar el link: ${error.message}`);
       return;
     }
-    setEnviado(true);
+    setLinkEnviado(true);
   }
 
-  async function verificarCodigo(e: React.FormEvent) {
-    e.preventDefault();
-    setVerificando(true);
-    setError(null);
-    const { error } = await supabase.auth.verifyOtp({ email, token: codigo, type: "email" });
-    setVerificando(false);
-    if (error) setError("El codigo no es valido o ya vencio. Revisa el ultimo correo o pide uno nuevo.");
-    // si sale bien, la sesion cambia y la app entra sola
-  }
-
-  if (enviado) {
+  if (linkEnviado) {
     return (
-      <div className="flex min-h-dvh items-center justify-center p-6">
-        <form onSubmit={verificarCodigo} className="w-full max-w-sm space-y-4 text-center">
+      <div className="flex min-h-dvh items-center justify-center p-6 text-center">
+        <div className="max-w-sm space-y-3">
           <p className="text-lg font-medium">Revisa tu correo</p>
           <p className="text-sm text-taupe">
-            Te enviamos un codigo a {email}. Escribelo aqui, sin salir de la app, para que la sesion quede guardada.
+            Te enviamos un link a {email}. Al abrirlo entras desde el navegador. Una vez adentro, abre el menu y toca{" "}
+            <span className="font-medium text-ink">Crear contraseña</span>: con ella entras desde la app de la pantalla
+            de inicio y la sesion queda guardada.
           </p>
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            autoFocus
-            placeholder="Codigo"
-            value={codigo}
-            onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 10))}
-            className="w-full rounded-2xl border border-sand px-4 py-3 text-center text-2xl tracking-widest"
-          />
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={verificando || codigo.length < 6}
-            className="w-full rounded-2xl bg-clay py-3 text-lg font-medium text-white disabled:opacity-50"
-          >
-            {verificando ? "Entrando..." : "Entrar"}
-          </button>
           <button
             type="button"
             onClick={() => {
-              setEnviado(false);
-              setCodigo("");
-              setError(null);
+              setLinkEnviado(false);
+              setModo("CONTRASENA");
             }}
             className="text-sm text-taupe underline"
           >
-            Cambiar correo o pedir otro codigo
+            Volver
           </button>
-        </form>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-6">
-      <form onSubmit={enviarCodigo} className="w-full max-w-sm space-y-4">
+      <form onSubmit={modo === "CONTRASENA" ? entrarConContrasena : enviarLink} className="w-full max-w-sm space-y-4">
         <h1 className="text-center text-2xl font-semibold">Finanzas Familiares</h1>
         <p className="text-center text-sm text-taupe">Entra con tu correo para registrar movimientos</p>
         <input
           type="email"
           required
           autoFocus
+          autoComplete="email"
           placeholder="tu@correo.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full rounded-2xl border border-sand px-4 py-3 text-lg"
         />
+        {modo === "CONTRASENA" && (
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="Contraseña"
+            value={contrasena}
+            onChange={(e) => setContrasena(e.target.value)}
+            className="w-full rounded-2xl border border-sand px-4 py-3 text-lg"
+          />
+        )}
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"
           disabled={enviando}
           className="w-full rounded-2xl bg-clay py-3 text-lg font-medium text-white disabled:opacity-50"
         >
-          {enviando ? "Enviando..." : "Enviarme un codigo para entrar"}
+          {enviando ? "Un momento..." : modo === "CONTRASENA" ? "Entrar" : "Enviarme un link para entrar"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setModo(modo === "CONTRASENA" ? "LINK" : "CONTRASENA");
+            setError(null);
+          }}
+          className="w-full text-center text-sm text-taupe underline"
+        >
+          {modo === "CONTRASENA" ? "¿Aun no tienes contraseña? Entrar con link al correo" : "Entrar con contraseña"}
         </button>
       </form>
     </div>
